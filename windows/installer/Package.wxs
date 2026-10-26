@@ -1,0 +1,37 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="자비스 Windows" Manufacturer="Sasarisa Windows Community" Version="$(var.BuildVersion)" UpgradeCode="7F114A1B-B332-4D79-98B4-FE4092418D4D" Scope="perUser" Language="1042" Codepage="949">
+    <MajorUpgrade DowngradeErrorMessage="더 최신 버전이 설치되어 있습니다." Schedule="afterInstallInitialize" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="ARPPRODUCTICON" Value="AssistantIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/reset980reset980/sasarisa" />
+    <Property Id="INSTALLFOLDER" Secure="yes">
+      <RegistrySearch Id="PreviousInstallFolder" Root="HKCU" Key="Software\SasarisaWindows" Name="InstallDir" Type="raw" Bitness="always64" />
+    </Property>
+    <Icon Id="AssistantIcon" SourceFile="..\app\VoiceAssistant.Desktop\Assets\assistant.ico" />
+    <StandardDirectory Id="LocalAppDataFolder"><Directory Id="INSTALLFOLDER" Name="SasarisaWindows" /></StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder"><Directory Id="AppMenuFolder" Name="자비스 Windows" /></StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+    <Component Directory="AppMenuFolder" Id="StartMenuShortcut" Guid="6B52B2D0-D2EB-441A-8A8F-5C0C885753DB">
+      <Shortcut Id="StartMenuLink" Name="자비스 Windows" Target="[INSTALLFOLDER]VoiceAssistant.exe" WorkingDirectory="INSTALLFOLDER" Icon="AssistantIcon" />
+      <RemoveFolder Id="RemoveAppMenu" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\SasarisaWindows" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      <RegistryValue Root="HKCU" Key="Software\SasarisaWindows" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
+    </Component>
+    <Component Directory="DesktopFolder" Id="DesktopShortcut" Guid="21D6615C-DC7F-4479-A5CC-EA0C8E720FE2">
+      <Shortcut Id="DesktopLink" Name="자비스 Windows" Target="[INSTALLFOLDER]VoiceAssistant.exe" WorkingDirectory="INSTALLFOLDER" Icon="AssistantIcon" />
+      <RegistryValue Root="HKCU" Key="Software\SasarisaWindows" Name="Desktop" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Feature Id="MainFeature" Title="자비스 Windows" Level="1"><ComponentGroupRef Id="ApplicationFiles" /><ComponentRef Id="StartMenuShortcut" /><ComponentRef Id="DesktopShortcut" /></Feature>
+    <CustomAction Id="CloseForRemoval" FileRef="MainExecutable" ExeCommand="--quit" Execute="immediate" Return="ignore" />
+    <CustomAction Id="BackupForUpdate" FileRef="MainExecutable" ExeCommand="--prepare-update" Execute="immediate" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="CloseForRemoval" Before="InstallValidate" Condition="Installed AND REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="BackupForUpdate" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" Condition="NOT Installed" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2" Condition="1" />
+    </UI>
+  </Package>
+</Wix>

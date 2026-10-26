@@ -18,7 +18,7 @@ import numpy as np
 import sherpa_onnx
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODEL = os.path.join(HERE, "models", "sherpa-onnx-streaming-zipformer-korean-2024-06-16")
+MODEL = os.environ.get("VOICE_ASSISTANT_MODEL") or os.path.join(HERE, "models", "sherpa-onnx-streaming-zipformer-korean-2024-06-16")
 SR = 16000
 CHUNK = 1600                    # 0.1 s — 맥 쪽 탭(1024 샘플 @48 kHz ≈ 0.02 s)보다 크지만 감지 지연엔 거의 영향 없음
 
@@ -104,14 +104,28 @@ def make_asr(a):
         enable_endpoint_detection=True, rule1_min_trailing_silence=2.4, rule2_min_trailing_silence=1.2, rule3_min_utterance_length=20)
 
 
-def make_kws(a, hangul):
+def encode_keyword(name, model):
+    """Validate before native KWS: invalid tokens can terminate the worker process."""
     import sentencepiece as spm
-    sp = spm.SentencePieceProcessor(model_file=os.path.join(MODEL, "bpe.model"))
+    if not isinstance(name, str) or not name.strip() or len(name) > 60 or any(ord(c) < 32 or c in "@:#" for c in name):
+        raise ValueError("호출 이름은 줄바꿈이나 @ : # 없이 1~60자로 입력하세요.")
+    sp = spm.SentencePieceProcessor(model_file=os.path.join(model, "bpe.model"))
+    with open(os.path.join(model, "tokens.txt"), encoding="utf-8") as f:
+        vocabulary = {line.rstrip().rsplit(" ", 1)[0] for line in f}
+    pieces = sp.encode(name.strip(), out_type=str)
+    if not pieces or any(piece == "<unk>" or piece not in vocabulary for piece in pieces):
+        raise ValueError("모델이 지원하지 않는 글자가 호출 이름에 있어요. 다른 이름을 사용하거나 바로 말하기 단축키를 이용하세요.")
+    # @ labels are whitespace-delimited; spaces here would become extra model tokens.
+    label = "".join(name.split())
+    return " ".join(pieces) + f" @{label}\n"
+
+
+def make_kws(a, hangul):
     names = sorted({hangul, hangul.replace("사", "싸")} | set(a.kw or []))
+    lines = [encode_keyword(n, MODEL) for n in names]
     path = os.path.join(HERE, "keywords.txt")
     with open(path, "w", encoding="utf-8") as f:
-        for n in names:
-            f.write(" ".join(sp.encode(n, out_type=str)) + f" @{n}\n")
+        f.writelines(lines)
     return sherpa_onnx.KeywordSpotter(**model_files(not a.fp32), keywords_file=path, num_threads=a.threads,
                                       keywords_score=a.kw_score, keywords_threshold=a.kw_threshold)
 

@@ -1,0 +1,10 @@
+# Python 3.13 x64; versions and hashes verified for the standalone distribution.
+cffi==2.1.1 --hash=sha256:1aa5645c30469b09530c4ebca77ebf8f17618293c58f8549cb1a543a50236e7d
+numpy==2.4.6 --hash=sha256:c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359
+pycparser==3.12 --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e
+sentencepiece==0.2.2 --hash=sha256:74f0ee601047c0c12a783088b51be4e6214a62ecd9e02278c477433cd16e0ed9
+sherpa-onnx==2.0.0 --hash=sha256:e6be1c7ca9ca8b4140243951b4b7113a2b1a2b1b85deb0bb0c3d2d0394b9feed
+sherpa-onnx-core==2.0.0 --hash=sha256:dcb06b6427f841861376b24703fee3dba24723527b54d7429eeac6286f8567e9
+sounddevice==0.5.6 --hash=sha256:7f4162f514f007b0bf25a3ccfed3f1705bc2ec311888a90232729eec4f57a4f4
+soundfile==0.14.0 --hash=sha256:299491d3499460fb1b74bb4bd78b57ffc2d243a5fafa7b6ec1b264875c78453e
+typing_extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

@@ -1,0 +1,18 @@
+<Project Sdk="WixToolset.Sdk/4.0.6">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <OutputName>Sasarisa-Windows-$(BuildVersion)-x64</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <Cultures>ko-KR</Cultures>
+    <DefineConstants>PayloadDir=$(PayloadDir);BuildVersion=$(BuildVersion)</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- This package is deliberately per-user only; ICE91 warns about optional
+         per-machine installs, which Scope=perUser never offers. -->
+    <SuppressIces>ICE91</SuppressIces>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="4.0.6" />
+    <Compile Include="Package.wxs" />
+    <Compile Include="obj\Payload.wxs" />
+  </ItemGroup>
+</Project>

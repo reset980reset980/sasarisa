@@ -1,3 +1,5 @@
+> **Windows port:** This branch includes a native Windows assistant. See [Windows setup and feature status](windows/README.md). The macOS documentation below describes the original project.
+
 <div align="center">
 
 # ◉ Sasarisa
