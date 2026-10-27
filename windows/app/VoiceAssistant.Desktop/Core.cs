@@ -73,13 +73,19 @@ public static class SettingsStore
         if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme is not ("http" or "https") || !u.IsLoopback || !string.IsNullOrEmpty(u.UserInfo)) throw new ArgumentException("로컬 서버 주소는 http://127.0.0.1:포트 형식으로 입력하세요.");
         return u;
     }
-    public static void Save(UiSettings s)
+    public static void Save(UiSettings s) => SaveWithBackup(s, ".backup");
+    public static void SaveVocabulary(UiSettings s, bool addedWords) => SaveWithBackup(s, addedWords ? ".vocabulary-backup" : null);
+    static void SaveWithBackup(UiSettings s, string? backupSuffix)
     {
         Validate(s);
-        var temp = AppPaths.ConfigFile + ".new";
-        File.WriteAllText(temp, JsonSerializer.Serialize(s, Json));
-        if (File.Exists(AppPaths.ConfigFile)) File.Replace(temp, AppPaths.ConfigFile, AppPaths.ConfigFile + ".backup");
-        else File.Move(temp, AppPaths.ConfigFile);
+        var temp = AppPaths.ConfigFile + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(s, Json));
+            if (File.Exists(AppPaths.ConfigFile)) File.Replace(temp, AppPaths.ConfigFile, backupSuffix == null ? null : AppPaths.ConfigFile + backupSuffix);
+            else File.Move(temp, AppPaths.ConfigFile);
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 }
 

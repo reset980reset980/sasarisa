@@ -48,6 +48,7 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
         if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--listening-app-only")) { Shutdown(RunListeningAppChecks()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--vocabulary-app-only")) { Shutdown(await RunVocabularyAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync(e.Args.Contains("--phone-ai"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--combo-app-only")) { Shutdown(await RunComboAppChecksAsync(e.Args.Contains("--combo-native"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
@@ -297,7 +298,18 @@ public partial class App : System.Windows.Application
             if (voice && !string.IsNullOrWhiteSpace(wav) && !string.IsNullOrWhiteSpace(settings.WhisperUrl))
             {
                 window.SetStatus("문장을 다듬어 듣는 중", "로컬 Whisper 서버에서 확인하고 있어요.", listening, true);
-                try { var refined = await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token); if (interruptedSpeech) refined = BargeInSession.DropGreeting(refined, settings.Desktop.UserName); if (!string.IsNullOrWhiteSpace(refined)) text = isDictation ? refined.Trim() : LearnedNames.Strip(refined, settings); parsed = Greetings.Parse(text, settings) ?? CommandParser.Parse(text, webSearch); }
+                try
+                {
+                    var refined = await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords);
+                    token.ThrowIfCancellationRequested();
+                    if (interruptedSpeech) refined = BargeInSession.DropGreeting(refined, settings.Desktop.UserName);
+                    if (!string.IsNullOrWhiteSpace(refined))
+                    {
+                        refined = isDictation ? refined.Trim() : LearnedNames.Strip(refined, settings);
+                        LearnVocabulary(text, refined); text = refined;
+                    }
+                    parsed = Greetings.Parse(text, settings) ?? CommandParser.Parse(text, webSearch);
+                }
                 catch (Exception ex) when (ex is not OperationCanceledException) { window.AddMessage("system", "Whisper 연결이 되지 않아 실시간 인식 결과를 사용해요. " + ex.Message); }
             }
             token.ThrowIfCancellationRequested(); window.SetPartial(""); window.AddMessage("user", text);

@@ -292,6 +292,7 @@ public static class Checks
         failed += MicrophoneHealthChecks.Run(rows);
         failed += NameLearningChecks.Run(rows);
         failed += ListeningStateChecks.Run(rows);
+        failed += VocabularyChecks.Run(rows);
         failed += await BargeInChecks.RunAsync(rows, args.Contains("--devices"));
         failed += InstanceScopeChecks.Run(rows);
         failed += await ActionChecks.RunAsync(rows);

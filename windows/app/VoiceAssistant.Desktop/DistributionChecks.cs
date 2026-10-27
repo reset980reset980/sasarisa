@@ -68,12 +68,14 @@ internal static class DistributionChecks
             var root = Folder(); var home = Folder(); Directory.CreateDirectory(Path.Combine(root, "runtime"));
             File.WriteAllBytes(Path.Combine(root, "runtime", "worker.py"), bytes); File.WriteAllText(Path.Combine(root, "unlisted.txt"), "foreign"); File.WriteAllText(Path.Combine(home, "config.json"), "{\"Name\":\"아리\"}");
             var listeningPath = Path.Combine(home, "listening-state.json"); new ListeningState(listeningPath).Remember(true);
+            File.WriteAllText(Path.Combine(home, "config.json.vocabulary-backup"), "{\"Text\":{\"CustomWords\":[\"블렌더\"]}}");
             File.WriteAllText(Path.Combine(root, "distribution.json"), JsonSerializer.Serialize(new DistributionManifest(UpgradeBackup.ProductId, "0.2.0", new() { new("runtime/worker.py", bytes.Length, Convert.ToHexString(SHA256.HashData(bytes))) })));
             var path = UpgradeBackup.Create(root, home); using var zip = ZipFile.OpenRead(path);
             Require(zip.GetEntry("user-data/listening-state.json") != null, "Listening intent missing from backup");
             Require(zip.GetEntry("app/runtime/worker.py") != null && zip.GetEntry("user-data/config.json") != null && zip.GetEntry("app/unlisted.txt") == null && zip.GetEntry("app/distribution.json") != null && zip.GetEntry("backup-info.json") != null, "Backup contents incomplete or included foreign data");
             var restore = Path.Combine(home, "restore"); ZipFile.ExtractToDirectory(path, restore); Require(File.ReadAllBytes(Path.Combine(restore, "app", "runtime", "worker.py")).SequenceEqual(bytes) && File.ReadAllText(Path.Combine(restore, "user-data", "config.json")) == File.ReadAllText(Path.Combine(home, "config.json")), "Restored backup differs");
             Require(new ListeningState(Path.Combine(restore, "user-data", "listening-state.json")).Requested, "Restored listening intent differs");
+            Require(VocabularyFiles.Read(Path.Combine(restore, "user-data", "config.json.vocabulary-backup")).Words.Single() == "블렌더", "Vocabulary rollback missing from update backup");
             Require(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.partial").Length == 0, "Partial backup leaked"); return Task.CompletedTask;
         });
         await Check("Update backup rejects manifest traversal and case-insensitive duplicate paths", async () =>

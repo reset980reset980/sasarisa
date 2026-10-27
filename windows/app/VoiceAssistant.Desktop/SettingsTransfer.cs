@@ -48,7 +48,7 @@ public static class SettingsTransfer
     }
     public static string Serialize(UiSettings settings)
     {
-        var copy = Copy(settings); Validate(copy);
+        var copy = Copy(settings); Validate(copy); copy.Text.WordCandidates = new();
         var text = JsonSerializer.Serialize(new SettingsPackage(Format, 1, copy), Json);
         if (Encoding.UTF8.GetByteCount(text) > MaxBytes) throw new ArgumentException("설정 파일은 512 KB 이내여야 합니다.");
         return text;
@@ -80,6 +80,7 @@ public static class SettingsTransfer
     public static UiSettings Prepare(UiSettings imported, UiSettings current, bool connections, bool devices)
     {
         var next = Copy(imported); next.Desktop.SetupComplete = current.Desktop.SetupComplete;
+        next.Text.WordCandidates = new(current.Text.WordCandidates);
         // Importing someone else's preferences must not grant access from a phone.
         next.ProRemote = current.ProRemote;
         next.GrowTogether = current.GrowTogether;
@@ -117,6 +118,7 @@ public static class SettingsTransfer
         Item("알림 위치", Position(a.OverlayPosition), Position(b.OverlayPosition)); Item("알림 화면", a.OverlayScreen, b.OverlayScreen); Item("작은 대기 표시", a.ShowIdleOrb, b.ShowIdleOrb);
         Item("인사 화면", Style(a.GreetingStyle), Style(b.GreetingStyle)); Item("인사말", a.GreetingText, b.GreetingText); Item("인사 제목", a.GreetingTitle, b.GreetingTitle); Item("인사 부제", a.GreetingSubtitle, b.GreetingSubtitle); Item("인사 호출 문장", a.GreetingPhrases, b.GreetingPhrases); Item("인사 웹사이트", a.GreetingUrls, b.GreetingUrls); Item("인사 앱", a.GreetingApps, b.GreetingApps);
         Item("자주 쓰는 단어", before.Text.CustomWords, after.Text.CustomWords); Item("말버릇 제거", before.Text.RemoveFillers, after.Text.RemoveFillers); Item("제거할 말버릇", before.Text.FillerWords, after.Text.FillerWords); Item("AI 받아쓰기 다듬기", before.Text.PolishDictation, after.Text.PolishDictation);
+        Item("반복 보정 단어 자동 학습", before.Text.AutoLearnWords, after.Text.AutoLearnWords);
         return lines.Count == 0 ? "바뀌는 설정이 없습니다." : string.Join("\n\n", lines);
     }
     static string Mode(string id) => id == "voice" ? "이름 호출 또는 단축키" : id == "hold" ? "누르는 동안 듣기" : "단축키로 호출";

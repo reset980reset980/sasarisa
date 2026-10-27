@@ -86,7 +86,7 @@ public sealed class SpeechInput : IDisposable
         foreach (var line in text.Split('\n').Where(x => x.StartsWith('{'))) { using var d = JsonDocument.Parse(line); if (d.RootElement.GetProperty("type").GetString() == "devices") return JsonSerializer.Deserialize<List<DeviceOption>>(d.RootElement.GetProperty("devices")) ?? new(); }
         return new[] { new DeviceOption("", "Windows 기본 마이크") };
     }
-    public static async Task<string> RefineAsync(string url, string wav, CancellationToken ct)
+    public static async Task<string> RefineAsync(string url, string wav, CancellationToken ct, string[]? words = null)
     {
         var u = SettingsStore.ValidateLocalUrl(url);
         var endpoint = new Uri(u.GetLeftPart(UriPartial.Authority) + "/inference");
@@ -94,6 +94,11 @@ public sealed class SpeechInput : IDisposable
         using var form = new MultipartFormDataContent();
         var content = new ByteArrayContent(Convert.FromBase64String(wav)); content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
         form.Add(content, "file", "speech.wav"); form.Add(new StringContent("ko"), "language"); form.Add(new StringContent("json"), "response_format");
+        if (words is { Length: > 0 })
+        {
+            new TextPreferences { CustomWords = words }.Validate();
+            form.Add(new StringContent(string.Join(", ", words)), "prompt");
+        }
         using var res = await client.PostAsync(endpoint, form, ct); res.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)); return doc.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
     }

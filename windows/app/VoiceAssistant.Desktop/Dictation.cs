@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -10,6 +11,8 @@ namespace VoiceAssistant.Desktop;
 public sealed record TextPreferences
 {
     public string[] CustomWords { get; set; } = Array.Empty<string>();
+    public bool AutoLearnWords { get; set; }
+    public Dictionary<string, VocabularyCandidate> WordCandidates { get; set; } = new();
     public bool RemoveFillers { get; set; } = true;
     public string[] FillerWords { get; set; } = { "음", "으음", "어어", "음음" };
     public bool PolishDictation { get; set; }
@@ -17,6 +20,7 @@ public sealed record TextPreferences
     {
         if (CustomWords == null || CustomWords.Length > 150 || CustomWords.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 60 || x.Any(char.IsControl))) throw new ArgumentException("자주 쓰는 단어는 한 줄에 1~60자, 최대 150개입니다.");
         if (FillerWords == null || FillerWords.Length > 50 || FillerWords.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 30 || x.Any(char.IsWhiteSpace) || x.Any(char.IsControl))) throw new ArgumentException("말버릇은 한 줄에 공백 없이 1~30자, 최대 50개입니다.");
+        VocabularyLearning.Validate(WordCandidates);
     }
 }
 

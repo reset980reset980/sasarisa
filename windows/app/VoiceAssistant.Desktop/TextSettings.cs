@@ -8,15 +8,18 @@ namespace VoiceAssistant.Desktop;
 public partial class MainWindow
 {
     CancellationTokenSource? textPreview;
+    bool resetWordCandidatesDraft;
     void LoadTextPreferences(TextPreferences preferences)
     {
+        resetWordCandidatesDraft = false;
         CustomWordsInput.Text = string.Join(Environment.NewLine, preferences.CustomWords);
+        AutoLearnWordsInput.IsChecked = preferences.AutoLearnWords;
         FillerWordsInput.Text = string.Join(Environment.NewLine, preferences.FillerWords);
         RemoveFillersInput.IsChecked = preferences.RemoveFillers; PolishDictationInput.IsChecked = preferences.PolishDictation;
     }
     TextPreferences ReadTextPreferences()
     {
-        var result = new TextPreferences { CustomWords = Lines(CustomWordsInput.Text), FillerWords = Lines(FillerWordsInput.Text), RemoveFillers = RemoveFillersInput.IsChecked == true, PolishDictation = PolishDictationInput.IsChecked == true };
+        var result = _loadedSettings.Text with { CustomWords = Lines(CustomWordsInput.Text), FillerWords = Lines(FillerWordsInput.Text), RemoveFillers = RemoveFillersInput.IsChecked == true, PolishDictation = PolishDictationInput.IsChecked == true, AutoLearnWords = AutoLearnWordsInput.IsChecked == true, WordCandidates = resetWordCandidatesDraft ? new() : _loadedSettings.Text.WordCandidates };
         result.Validate(); return result;
     }
     async void PreviewDictation_Click(object sender, RoutedEventArgs e)

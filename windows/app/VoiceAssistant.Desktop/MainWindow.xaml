@@ -245,6 +245,10 @@
                                 <StackPanel Margin="0,16,0,0" TextElement.FontWeight="Normal">
                                     <TextBlock Text="자주 쓰는 이름·전문 용어 (한 줄에 하나)" Style="{StaticResource FieldLabel}" /><TextBox x:Name="CustomWordsInput" Style="{StaticResource Field}" AcceptsReturn="True" MinHeight="76" MaxHeight="150" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="자주 쓰는 단어" />
                                     <TextBlock Text="저장하면 다음 음성 인식부터 단어 힌트로 사용합니다. 인식 결과와 처리 속도를 비교하며 조절하세요." Style="{StaticResource HelpText}" />
+                                    <WrapPanel Margin="0,9,0,5"><Button Content="단어 가져오기" Style="{StaticResource SecondaryButton}" Padding="12,7" Click="ImportVocabulary_Click" /><Button Content="단어 내보내기" Style="{StaticResource SecondaryButton}" Padding="12,7" Margin="8,0,0,0" Click="ExportVocabulary_Click" /><Button Content="자동 학습 전 단어 복원" Style="{StaticResource SecondaryButton}" Padding="12,7" Margin="8,0,0,0" Click="RestoreVocabulary_Click" /></WrapPanel>
+                                    <CheckBox x:Name="AutoLearnWordsInput" Content="반복 보정된 단어 자동 학습" Margin="0,9,0,7" />
+                                    <TextBlock Text="로컬 Whisper가 실시간 인식과 다르게 들은 단어를 세 번 확인하면 추가합니다. 학습한 단어는 다음 듣기 시작부터 힌트로 사용하며 직접 지울 수 있습니다. 기본값은 꺼짐이고, 로컬 Whisper 주소가 필요합니다." Style="{StaticResource HelpText}" />
+                                    <TextBlock x:Name="VocabularyFeedback" Style="{StaticResource HelpText}" Text="Handy·macOS 사사리사·Windows 단어 JSON 또는 한 줄에 한 단어인 TXT를 가져올 수 있습니다." />
                                     <CheckBox x:Name="RemoveFillersInput" Content="받아쓰기에서 말버릇 제거" Margin="0,16,0,9" />
                                     <TextBlock Text="제거할 말버릇 (한 줄에 하나, 단어 전체가 같을 때만)" Style="{StaticResource FieldLabel}" /><TextBox x:Name="FillerWordsInput" Style="{StaticResource Field}" AcceptsReturn="True" MinHeight="64" MaxHeight="130" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="제거할 말버릇" />
                                     <CheckBox x:Name="PolishDictationInput" Content="선택한 AI로 받아쓰기 다듬기" Margin="0,17,0,7" />
