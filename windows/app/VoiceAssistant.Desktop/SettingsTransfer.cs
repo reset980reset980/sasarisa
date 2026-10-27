@@ -89,7 +89,7 @@ public static class SettingsTransfer
             next.ProviderProfiles = new(current.ProviderProfiles); next.WhisperUrl = current.WhisperUrl; next.ProjectDirectory = current.ProjectDirectory;
             next.Tts = current.Tts with { };
         }
-        if (!devices) { next.Device = current.Device; next.VoiceId = current.VoiceId; next.OutputId = current.OutputId; next.Desktop.OverlayScreen = current.Desktop.OverlayScreen; }
+        if (!devices) { next.Device = current.Device; next.VoiceId = current.VoiceId; next.OutputId = current.OutputId; next.Desktop.OverlayScreen = current.Desktop.OverlayScreen; next.Desktop.StartupListening = current.Desktop.StartupListening; }
         Validate(next); return next;
     }
     public static string Describe(UiSettings before, UiSettings after)
@@ -98,6 +98,8 @@ public static class SettingsTransfer
         string Display(object? value) => value switch { bool flag => flag ? "켜짐" : "꺼짐", string[] words => words.Length == 0 ? "비어 있음" : string.Join(" / ", words), string str => str.Length == 0 ? "기본값 / 비어 있음" : str, _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "" };
         void Item(string label, object? oldValue, object? newValue) { var oldText = Display(oldValue); var newText = Display(newValue); if (oldText != newText) lines.Add($"{label}\n  {oldText}\n  → {newText}"); }
         Item("호출 이름", before.Name, after.Name); Item("호출 방식", Mode(before.Activation), Mode(after.Activation)); Item("입력 마이크", before.Device, after.Device);
+        string Startup(string mode) => mode switch { "always" => "항상 듣기 시작", "off" => "항상 듣기 중지", _ => "마지막 듣기 상태 복원" };
+        Item("앱 실행 시 듣기", Startup(before.Desktop.StartupListening), Startup(after.Desktop.StartupListening));
         foreach (var name in before.LearnedWakes.Keys.Union(after.LearnedWakes.Keys).Order())
             Item("이름 발음 보정 · " + name, LearnedNames.For(before, name), LearnedNames.For(after, name));
         Item("말 끝 대기 (초)", before.SilenceSeconds, after.SilenceSeconds); Item("후속 대화 (초)", before.FollowUpSeconds, after.FollowUpSeconds);

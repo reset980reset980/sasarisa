@@ -47,6 +47,7 @@ public partial class App : System.Windows.Application
         if (e.Args.FirstOrDefault() == "--microphone-status") { Shutdown(await MicrophoneChecks.SnapshotAsync()); return; }
         if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
         if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--listening-app-only")) { Shutdown(RunListeningAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync(e.Args.Contains("--phone-ai"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--combo-app-only")) { Shutdown(await RunComboAppChecksAsync(e.Args.Contains("--combo-native"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
@@ -107,7 +108,7 @@ public partial class App : System.Windows.Application
         await RefreshDevices();
         if(closing)return;
         if (!settings.Desktop.SetupComplete || !SetupReadiness.HasSpeechEnvironment) ShowSetup();
-        if (e.Args.Contains("--listen")) StartListening();
+        RestoreListening(e.Args.Contains("--listen"));
         RestartRemote();
         RestartGrow();
     }
@@ -180,7 +181,7 @@ public partial class App : System.Windows.Application
         catch (Exception ex) { ShowError(ex.Message); return ex.Message; }
         finally { UpdateHotkeyDisplay(); }
     }
-    void ToggleListening() { if (listening || starting) { StopInput(); StopTurn(); window.SetPartial(""); RefreshStatus(); } else StartListening(); }
+    void ToggleListening() { if (listening || starting) { StopInput(); StopTurn(); RememberListening(false); window.SetPartial(""); RefreshStatus(); } else { RememberListening(true); StartListening(); } }
     void StartListening(bool automatic = false)
     {
         if (personalEditorOpen || listening || starting) return;
@@ -195,6 +196,7 @@ public partial class App : System.Windows.Application
     void Wake()
     {
         if (personalEditorOpen) return;
+        if (!listening && !starting) RememberListening(true);
         if(settings.Activation=="hold")
         {
             if(!listening&&!starting)StartListening();
@@ -209,6 +211,7 @@ public partial class App : System.Windows.Application
     void StartHold()
     {
         if(personalEditorOpen || holding)return;
+        if (!listening && !starting) RememberListening(true);
         StopTurn();if(!listening&&!starting)StartListening();
         BeginManualMicrophone();
         holding=true;awakeUntil=DateTimeOffset.MaxValue;CaptureInput(true);

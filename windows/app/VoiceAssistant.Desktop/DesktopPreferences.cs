@@ -19,10 +19,12 @@ public sealed record DesktopPreferences
     public string[] GreetingUrls { get; set; } = Array.Empty<string>();
     public string[] GreetingApps { get; set; } = Array.Empty<string>();
     public bool SetupComplete { get; set; }
+    public string StartupListening { get; set; } = "restore";
     public void Validate(string activation)
     {
         if (UserName.Length > 30 || UserName.Any(char.IsControl)) throw new ArgumentException("사용자 호칭은 30자 이내로 입력하세요.");
         HotkeyManager.ValidatePair(WakeHotkey, StopHotkey, activation == "hold");
+        if (StartupListening is not ("restore" or "always" or "off")) throw new ArgumentException("앱 실행 시 듣기 방식을 확인하세요.");
         if (OverlayPosition is not ("center" or "bottomCenter" or "bottomRight" or "bottomLeft" or "top")) throw new ArgumentException("알림 위치를 확인하세요.");
         if (string.IsNullOrWhiteSpace(OverlayScreen) || OverlayScreen.Length > 200) throw new ArgumentException("알림을 표시할 모니터를 확인하세요.");
         if (GreetingStyle is not ("reactor" or "calm" or "card")) throw new ArgumentException("인사 화면 종류를 확인하세요.");

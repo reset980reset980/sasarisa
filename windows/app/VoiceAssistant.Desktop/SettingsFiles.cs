@@ -48,7 +48,7 @@ public sealed class SettingsImportWindow : Window
         header.Children.Add(new TextBlock { Text = "바뀌는 설정을 확인하세요", FontSize = 24, FontWeight = FontWeights.SemiBold });
         header.Children.Add(new TextBlock { Text = "적용하면 저장된 설정과 화면에서 편집 중인 값을 바꿉니다.\nAPI 키·로그인·기억·루틴·등록 앱은 현재 상태를 유지합니다.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,12,0,14), Foreground = Brushes.SlateGray });
         var connections = new CheckBox { Content = "AI 연결·Whisper 주소·코딩 폴더도 가져오기", Margin = new Thickness(0,0,0,10) };
-        var devices = new CheckBox { Content = "마이크·목소리·출력 장치·알림 화면도 가져오기", Margin = new Thickness(0,0,0,15) }; header.Children.Add(connections); header.Children.Add(devices);
+        var devices = new CheckBox { Content = "마이크·시작 시 듣기·목소리·출력 장치·알림 화면도 가져오기", Margin = new Thickness(0,0,0,15) }; header.Children.Add(connections); header.Children.Add(devices);
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,16,0,0) }; DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         var cancel = new Button { Content = "취소", IsCancel = true, Padding = new Thickness(20,9,20,9), Margin = new Thickness(0,0,10,0), Style = (Style)Application.Current.FindResource("SecondaryButton") };
         var apply = new Button { Content = "확인한 설정 적용", Padding = new Thickness(20,9,20,9), Style = (Style)Application.Current.FindResource("ActionButton") }; footer.Children.Add(cancel); footer.Children.Add(apply);

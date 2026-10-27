@@ -14,6 +14,7 @@ public partial class MainWindow
         WakeHotkeyInput.Text = HotkeySpec.Parse(preferences.WakeHotkey)?.Label ?? "사용 안 함";
         StopHotkeyInput.Text = HotkeySpec.Parse(preferences.StopHotkey)?.Label ?? "사용 안 함";
         UserNameInput.Text = preferences.UserName;
+        SelectTag(StartupListeningInput, preferences.StartupListening);
         SelectTag(OverlayPositionInput, preferences.OverlayPosition);
         var screens = new List<DeviceOption> { new("active", "현재 사용 중인 화면"), new("primary", "기본 화면") };
         screens.AddRange(System.Windows.Forms.Screen.AllScreens.Select((screen, i) => new DeviceOption(screen.DeviceName, $"화면 {i + 1} · {screen.Bounds.Width} × {screen.Bounds.Height}" + (screen.Primary ? " · 기본" : ""))));
@@ -47,7 +48,7 @@ public partial class MainWindow
         OverlayPosition = SelectedTag(OverlayPositionInput), OverlayScreen = (OverlayScreenInput.SelectedItem as DeviceOption)?.Id ?? "active", ShowIdleOrb = IdleOrbInput.IsChecked == true,
         GreetingStyle = SelectedTag(GreetingStyleInput), GreetingText = GreetingTextInput.Text.Trim(), GreetingTitle = GreetingTitleInput.Text.Trim(), GreetingSubtitle = GreetingSubtitleInput.Text.Trim(),
         GreetingPhrases = Lines(GreetingPhrasesInput.Text), GreetingUrls = Lines(GreetingUrlsInput.Text), GreetingApps = GreetingAppsInput.SelectedItems.OfType<DeviceOption>().Select(x => x.Id).ToArray(),
-        SetupComplete = _loadedSettings.Desktop.SetupComplete
+        SetupComplete = _loadedSettings.Desktop.SetupComplete, StartupListening = SelectedTag(StartupListeningInput)
     };
     void HotkeyInput_PreviewKeyDown(object sender, KeyEventArgs e)
     {

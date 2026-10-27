@@ -51,7 +51,7 @@ public static class UpgradeBackup
             {
                 foreach (var path in paths) { if (File.Exists(path.Full)) { archive.CreateEntryFromFile(path.Full, "app/" + path.Relative.Replace('\\', '/'), CompressionLevel.Fastest); count++; } else missing.Add(path.Relative); }
                 archive.CreateEntryFromFile(manifestPath, "app/distribution.json", CompressionLevel.Fastest); count++;
-                foreach (var name in new[] { "config.json", "personal.json", "apps.json", "timers.json", "echo-calibration.json", "name-training.json" })
+                foreach (var name in new[] { "config.json", "personal.json", "apps.json", "timers.json", "echo-calibration.json", "name-training.json", "listening-state.json" })
                 { var file = OwnedPath(home, name); if (File.Exists(file)) { archive.CreateEntryFromFile(file, "user-data/" + name, CompressionLevel.Fastest); count++; } }
                 using var writer = new StreamWriter(archive.CreateEntry("backup-info.json").Open());
                 writer.Write(JsonSerializer.Serialize(new { manifest.Version, OriginalRoot = Path.GetFullPath(root), Created = DateTimeOffset.UtcNow, MissingFiles = missing }, SettingsStore.Json)); count++;
