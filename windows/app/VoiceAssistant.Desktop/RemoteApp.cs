@@ -11,8 +11,10 @@ internal sealed class RemoteExecution(CancellationToken token)
 {
     static readonly AsyncLocal<RemoteExecution?> scope = new();
     readonly List<string> replies = new();
+    string voiceNotice = "";
     public static RemoteExecution? Current => scope.Value;
     public CancellationToken Token { get; } = token;
+    public void VoiceNotice(string text) => voiceNotice = RemoteText.Clip(text, 140);
     public void Capture(string role, string text)
     {
         if (role is not ("assistant" or "error") || string.IsNullOrWhiteSpace(text)) return;
@@ -24,7 +26,11 @@ internal sealed class RemoteExecution(CancellationToken token)
         try { Token.ThrowIfCancellationRequested(); await action(); }
         finally { scope.Value = previous; }
         if (Token.IsCancellationRequested) return "요청을 중지했거나 처리 시간이 초과됐어요. 이미 실행된 동작은 PC 화면에서 확인하세요.";
-        lock (replies) return replies.Count == 0 ? "완료 응답을 확인하지 못했어요. PC의 비서 화면을 확인하세요." : RemoteText.Clip(string.Join("\n", replies), 400);
+        lock (replies)
+        {
+            var answer = replies.Count == 0 ? "완료 응답을 확인하지 못했어요. PC의 비서 화면을 확인하세요." : string.Join("\n", replies);
+            return RemoteText.Clip((voiceNotice.Length > 0 ? voiceNotice + "\n" : "") + answer, 400);
+        }
     }
     public static void Guard(AssistantAction action, bool fromAi)
     {

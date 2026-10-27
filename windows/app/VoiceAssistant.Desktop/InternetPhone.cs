@@ -30,8 +30,10 @@ public sealed class InternetPhone : IRemoteTransport, IAsyncDisposable
     public CancellationToken Token => lifetime.Token;
     public bool Linked => !disposed && key.Length > 0 && !lifetime.IsCancellationRequested;
     public string AccountIdentity { get; private set; } = "";
-    public InternetPhone(string url = PublicUrl)
+    public PhoneClientInfo Client { get; }
+    public InternetPhone(string url = PublicUrl, bool preview = false)
     {
+        Client = PhoneClientInfo.For(preview);
         var uri = new Uri(url);
         if (uri.AbsolutePath != "/" || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.UserInfo.Length > 0 || (uri.Scheme != "https" && !(uri.Scheme == "http" && uri.Host == "127.0.0.1"))) throw new ArgumentException("An HTTPS relay origin is required");
         Url = uri.GetLeftPart(UriPartial.Authority);
@@ -57,7 +59,7 @@ public sealed class InternetPhone : IRemoteTransport, IAsyncDisposable
     {
         if (key.Length > 0 || disposed) throw new InvalidOperationException("Already opened");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.Token); timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        var data = await Request("/api/desktop/open", new { }, timeout.Token);
+        var data = await Request("/api/desktop/open", new { client = Client }, timeout.Token);
         key = data.GetProperty("token").GetString()!; Code = data.GetProperty("code").GetString()!;
         if (key.Length != 64 || !System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-f0-9]{64}$") || !System.Text.RegularExpressions.Regex.IsMatch(Code, "^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{12}$")) throw new InvalidOperationException("Invalid relay credentials");
         PairUntil = DateTimeOffset.FromUnixTimeMilliseconds(data.GetProperty("pairUntil").GetInt64());

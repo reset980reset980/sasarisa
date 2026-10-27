@@ -47,7 +47,7 @@ public partial class App : System.Windows.Application
         if (e.Args.FirstOrDefault() == "--microphone-status") { Shutdown(await MicrophoneChecks.SnapshotAsync()); return; }
         if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
         if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
-        if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync(e.Args.Contains("--phone-ai"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--combo-app-only")) { Shutdown(await RunComboAppChecksAsync(e.Args.Contains("--combo-native"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--phone-app-only")) { Shutdown(await RunPhoneAppChecksAsync()); return; }
@@ -427,7 +427,7 @@ public partial class App : System.Windows.Application
             case "timer":
                 var added = timers.Add(action.Number, action.Value);
                 actionHistory.Record("타이머 만들기 · " + added.Label, _ => Task.FromResult(timers.Remove(added.Id) ? "방금 만든 타이머를 취소했어요." : "그 타이머는 이미 끝났거나 취소됐어요.")); break;
-            case "list_timers": window.AddMessage("system", timers.Items.Count == 0 ? "진행 중인 타이머가 없어요." : string.Join("\n", timers.Items.OrderBy(x => x.Due).Select(x => $"{x.Due:MM/dd HH:mm:ss} · {x.Label}"))); break;
+            case "list_timers": return timers.Items.Count == 0 ? "진행 중인 타이머가 없어요." : string.Join("\n", timers.Items.OrderBy(x => x.Due).Select(x => $"{x.Due:MM/dd HH:mm:ss} · {x.Label}"));
             case "open_app":
                 var before = OwnedWindow.VisibleWindows(); var launched = WindowsActions.OpenApp(action.Value);
                 var label = AppRegistry.Default.Find(action.Value)?.Name ?? CommandParser.Apps.First(x => x.Value == action.Value).Key;
@@ -545,18 +545,20 @@ public partial class App : System.Windows.Application
     }
     async Task SayAsync(string text, CancellationToken token, bool force = false,UiSettings? preview=null)
     {
-        if ((!settings.Speak && !force) || string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        if (!settings.Speak && !force) { RemoteExecution.Current?.VoiceNotice("PC의 답변 읽기가 꺼져 있어 텍스트로만 답해요. PC의 휴대폰 연결 화면에서 켤 수 있어요."); return; }
         EndSpeechBarge(true, false); waitingBarge = false;
         var version = ++speechVersion; speaking = true; CaptureInput(false);RefreshStatus();
         try
         {
             var options = preview ?? settings;
+            if (options.SpeechVolume == 0) RemoteExecution.Current?.VoiceNotice("PC 답변 음량이 0이에요. PC 설정에서 답변 음량을 높여 주세요.");
             var result = await output.SpeakAsync(text, token, options, ObservePlayback(version, text, options));
             if (version != speechVersion) return;
             if (result.Notice != null) window.AddMessage("system", result.Notice);
             if (preview != null) { var report = result.Notice ?? ExternalVoice.Name(result.Provider) + " 시험 출력을 마쳤어요. 적용하려면 설정을 저장하세요."; window.AddMessage("system", report); window.ReportVoicePreview(report, result.UsedFallback); }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException) { if (version == speechVersion) { window.AddMessage("system", "음성 출력: " + ex.Message); if (preview != null) window.ReportVoicePreview(ex.Message, true); } }
+        catch (Exception ex) when (ex is not OperationCanceledException) { if (version == speechVersion) { window.AddMessage("system", "음성 출력: " + ex.Message); RemoteExecution.Current?.VoiceNotice("PC 음성 출력에 실패했어요. PC에서 출력 장치와 음성 설정을 확인해 주세요."); AppPaths.Log("tts-error", ex.GetType().Name); if (preview != null) window.ReportVoicePreview(ex.Message, true); } }
         finally { if (version == speechVersion) { EndSpeechBarge(false, true); speaking = false; if (!busy) CaptureInput(ShouldCaptureSpeech()); RefreshStatus(); } }
     }
     void ShowError(string message) { window.AddMessage("error", message); AppPaths.Log("error", message); overlay.SetContent("확인이 필요해요", message, false); overlay.ShowOverlay(); overlayUntil = DateTimeOffset.Now.AddSeconds(10); }

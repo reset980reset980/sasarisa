@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 
 const source=await readFile(new URL('../app/VoiceAssistant.Desktop/PhoneWeb/phone.js',import.meta.url),'utf8');
-async function fixture(t,{internet=true,secure=true,storageBlocked=false}={}) {
+async function fixture(t,{internet=true,secure=true,storageBlocked=false,client={kind:'standard',version:'0.2.28'}}={}) {
   const elements=new Map(), documentEvents={}, windowEvents={}, calls=[], recognizers=[];
   class Element {
     value='';textContent='';children=[];hidden=false;disabled=false;handlers={};attributes={};
@@ -21,7 +21,7 @@ async function fixture(t,{internet=true,secure=true,storageBlocked=false}={}) {
   const document={hidden:false,getElementById:element,querySelectorAll:()=>[],createElement:()=>new Element(),addEventListener:(type,fn)=>documentEvents[type]=fn};
   const storage=new Map();
   const context=vm.createContext({document,window:{SpeechRecognition:Speech,isSecureContext:secure,addEventListener:(type,fn)=>windowEvents[type]=fn},sessionStorage:{getItem:key=>{if(storageBlocked)throw Error();return storage.get(key);},setItem:(key,value)=>{if(storageBlocked)throw Error();storage.set(key,value);},removeItem:key=>storage.delete(key)},crypto:webcrypto,AbortController,setTimeout,clearTimeout,
-    fetch:async(route,options)=>{calls.push({route,options});const data=route==='/api/info'?{mode:internet?'internet':'local',voice:internet}:route==='/api/pair'?{token:'test-phone-token'}:route==='/api/status'?{connected:true}:route==='/api/command'?{pending:false,result:'clock fixture'}:{message:'stopped'};return{ok:true,status:200,json:async()=>data};}});
+    fetch:async(route,options)=>{calls.push({route,options});const data=route==='/api/info'?{mode:internet?'internet':'local',voice:internet}:route==='/api/pair'?{token:'test-phone-token',client}:route==='/api/status'?{connected:true,client}:route==='/api/command'?{pending:false,result:'clock fixture'}:{message:'stopped'};return{ok:true,status:200,json:async()=>data};}});
   vm.runInContext(source,context); const settle=()=>new Promise(resolve=>setImmediate(resolve)); await settle();
   const fire=async(id,type='click')=>{await element(id).handlers[type]({preventDefault(){}});await settle();};
   async function pair(){element('code').value='ABCD2345EFGH';await fire('pairForm','submit');}
@@ -55,4 +55,17 @@ test('long transcript is kept for editing and is not submitted',async t=>{
 test('unavailable session storage does not break pairing or typed commands',async t=>{
   const f=await fixture(t,{storageBlocked:true});await f.pair();f.element('command').value='지금 몇 시야';await f.fire('commandForm','submit');
   assert.equal(f.calls.filter(x=>x.route==='/api/command').length,1);assert.equal(f.element('notice').textContent,'완료');
+});
+
+test('preview pairing prominently explains clock-only and muted PC, normal pairing lists real commands',async t=>{
+  for(const kind of ['preview','standard']) {
+    const f=await fixture(t,{client:{kind,version:'0.2.28'}});await f.pair();
+    assert.match(f.element('connectionName').textContent,/0\.2\.28/);
+    if(kind==='preview') {assert.match(f.element('connectionDetail').textContent,/시계 명령만/);assert.match(f.element('connectionDetail').textContent,/PC 음성은 꺼져/);assert.equal(f.element('connectionDetail').className,'connection-warning');}
+    else {assert.match(f.element('connectionDetail').textContent,/타이머·앱 실행/);assert.equal(f.element('connectionDetail').className,'hint');}
+  }
+});
+
+test('missing profile never presents a legacy preview as a normal connection',async t=>{
+  const f=await fixture(t,{client:null});await f.pair();assert.match(f.element('connectionName').textContent,/종류 확인 필요/);assert.match(f.element('connectionDetail').textContent,/새 연결 코드/);
 });

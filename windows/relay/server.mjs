@@ -71,10 +71,15 @@ export async function createRelay({origin, clock = Date.now, pollMs = 20000, web
       if (limits.size > 10000) return json(503,{error:'잠시 뒤 다시 연결하세요.'});
       const token = (req.headers.authorization || '').replace(/^Bearer /,'');
       if (route === '/api/desktop/open' && req.method === 'POST') {
-        await body(req);
+        const data = await body(req);
+        let client = {kind:'unknown',version:''};
+        if(data.client !== undefined) {
+          if(!data.client || !['standard','preview'].includes(data.client.kind) || typeof data.client.version !== 'string' || !/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(data.client.version)) return json(400,{error:'PC 연결 정보의 형식을 확인하세요.'});
+          client = {kind:data.client.kind,version:data.client.version};
+        }
         if (!rate('open:'+peer,5,600000) || rooms.size >= 128) return json(429,{error:'연결을 너무 자주 만들었어요. 잠시 뒤 다시 시도하세요.'});
         let code; do { code = Array.from({length:12},()=>alphabet[randomInt(alphabet.length)]).join(''); } while(codes.has(code));
-        const room = {token:secret(),code,pairUntil:clock()+600000,expires:clock()+28800000,seen:clock(),phones:new Set(),commands:new Map(),wait:null,polling:false,closed:false};
+        const room = {token:secret(),code,client,pairUntil:clock()+600000,expires:clock()+28800000,seen:clock(),phones:new Set(),commands:new Map(),wait:null,polling:false,closed:false};
         rooms.set(room.token,room); codes.set(code,room);
         return json(200,{token:room.token,code,expires:room.expires,pairUntil:room.pairUntil});
       }
@@ -113,10 +118,10 @@ export async function createRelay({origin, clock = Date.now, pollMs = 20000, web
         if (!room || room.pairUntil <= clock() || room.seen + 45000 < clock()) return json(401,{error:'연결 코드와 PC 연결 상태를 확인하세요.'});
         if(room.phones.size>=4) return json(409,{error:'이 PC에는 휴대폰을 최대 4대까지 연결할 수 있어요.'});
         const key=secret(); phones.set(key,room); room.phones.add(key); wake(room);
-        return json(200,{token:key,expires:room.expires});
+        return json(200,{token:key,expires:room.expires,client:room.client});
       }
       const room = phones.get(token); if(!room) return json(401,{error:'연결이 만료됐어요. PC의 새 코드로 다시 연결하세요.'});
-      if(route==='/api/status' && req.method==='GET') return json(200,{connected:room.seen+45000>=clock(),expires:room.expires});
+      if(route==='/api/status' && req.method==='GET') return json(200,{connected:room.seen+45000>=clock(),expires:room.expires,client:room.client});
       if(route==='/api/logout' && req.method==='POST') { await body(req); cancel(room,token); room.phones.delete(token); phones.delete(token); return json(200,{ok:true}); }
       if(route==='/api/stop' && req.method==='POST') { await body(req); cancel(room,token); return json(200,{message:'이 휴대폰의 요청에 중지를 전달했어요.'}); }
       if(route==='/api/result' && req.method==='GET') {

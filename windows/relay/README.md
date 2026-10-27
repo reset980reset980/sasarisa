@@ -1,5 +1,7 @@
 # Internet phone connection
 
+Desktop 0.2.28 sends a bounded `client` profile (`standard` or `preview`, semantic version) at session creation. It is visible only in authenticated pairing/status replies. Older clients are explicitly `unknown`, so an old clock-only preview is never presented as a verified normal connection. The mobile page explains preview limits and how to reconnect from the normal app. PC speech settings and failures are reported in command replies; playback remains on the PC.
+
 This free, self-hosted relay adds Internet connectivity alongside the existing LAN server. Both the Windows PC and phone connect outward over HTTPS. Neither port forwarding nor access to the same Wi-Fi is required. A workplace must allow access to the selected HTTPS origin; this does not bypass network policies.
 
 `server.mjs` uses Node 22 built-in modules only. Set `PUBLIC_ORIGIN` to an exact HTTPS origin, `WEB_ROOT` to `PhoneWeb`, and `SOURCE_ARCHIVE` to the corresponding source zip. It binds loopback port 17846 behind a TLS reverse proxy. The proxy must preserve Host and replace untrusted X-Forwarded-For. The example service uses `https://sasarisa.xsw.kr`.

@@ -13,14 +13,19 @@ public partial class PhoneWindow : Window
     readonly Func<PhoneServer?> current;
     readonly Func<Task>? startInternet;
     readonly Func<InternetPhone?>? currentInternet;
+    readonly Func<bool>? speechEnabled;
+    readonly Func<bool, string?>? setSpeech;
+    bool refreshingSpeech;
     bool UsingInternet => ModeInput.SelectedIndex == 0 && startInternet != null;
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     bool changing;
     string? error;
-    public PhoneWindow(Func<PhoneNetwork, Task> start, Func<Task> stop, Func<PhoneServer?> current, Func<Task>? startInternet = null, Func<InternetPhone?>? currentInternet = null)
+    public PhoneWindow(Func<PhoneNetwork, Task> start, Func<Task> stop, Func<PhoneServer?> current, Func<Task>? startInternet = null, Func<InternetPhone?>? currentInternet = null, Func<bool>? speechEnabled = null, Func<bool, string?>? setSpeech = null)
     {
         InitializeComponent(); this.start = start; this.stop = stop; this.current = current;
         this.startInternet = startInternet; this.currentInternet = currentInternet;
+        this.speechEnabled = speechEnabled; this.setSpeech = setSpeech;
+        SpeechPanel.Visibility = speechEnabled == null || setSpeech == null ? Visibility.Collapsed : Visibility.Visible;
         if (startInternet == null || current() != null) ModeInput.SelectedIndex = 1;
         ModeInput.SelectionChanged += (_, _) => Refresh();
         RefreshNetworks();
@@ -44,6 +49,9 @@ public partial class PhoneWindow : Window
     }
     void Refresh()
     {
+        refreshingSpeech = true;
+        try { ReadRepliesInput.IsChecked = speechEnabled?.Invoke() ?? false; }
+        finally { refreshingSpeech = false; }
         var server = current(); var internet = currentInternet?.Invoke(); bool running = server != null || internet != null;
         ModeInput.IsEnabled = !running && !changing;
         NetworkInput.Visibility = UsingInternet ? Visibility.Collapsed : Visibility.Visible;
@@ -56,6 +64,11 @@ public partial class PhoneWindow : Window
         var deadline = internet?.PairUntil ?? server?.PairUntil;
         var state = internet != null ? internet.Status : server?.Problem;
         StatusText.Text = changing ? "연결 상태를 바꾸고 있어요…" : error ?? (!running ? "연결 꺼짐" : $"연결된 휴대폰 {internet?.Connected ?? server!.Connected}대 · " + (DateTimeOffset.UtcNow > deadline ? "코드 만료 · 새 코드를 받으세요." : $"코드 유효 시간: {deadline?.ToLocalTime():HH:mm}까지") + (state == null ? "" : "\n" + state));
+    }
+    void ReadReplies_Changed(object sender, RoutedEventArgs e)
+    {
+        if (refreshingSpeech || setSpeech == null) return;
+        error = setSpeech(ReadRepliesInput.IsChecked == true); Refresh();
     }
     async Task Change(Func<Task> action)
     {
@@ -88,9 +101,11 @@ public partial class App
     void ShowPhone()
     {
         if (phoneWindow != null) { phoneWindow.Show(); phoneWindow.Activate(); return; }
-        phoneWindow = new PhoneWindow(StartPhoneAsync, StopPhoneAsync, () => phoneServer, StartInternetPhoneAsync, () => internetPhone) { Owner = window };
+        phoneWindow = new PhoneWindow(StartPhoneAsync, StopPhoneAsync, () => phoneServer, StartInternetPhoneAsync, () => internetPhone,
+            () => settings.Speak, SetPhoneSpeech) { Owner = window };
         phoneWindow.Closed += (_, _) => phoneWindow = null; phoneWindow.Show();
     }
+    string? SetPhoneSpeech(bool enabled) => SaveSettings(settings with { Speak = enabled });
     async Task StartPhoneAsync(PhoneNetwork network)
     {
         if (closing || phoneServer != null || internetPhone != null) return;

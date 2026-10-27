@@ -5,7 +5,7 @@ import http from 'node:http';
 import {createRelay} from './server.mjs';
 
 const id=()=>randomBytes(16).toString('hex');
-async function fixture(t) {
+async function fixture(t, client) {
   let now=Date.now(); const origin='https://relay.example';
   const server=await createRelay({origin,clock:()=>now,pollMs:25});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -18,10 +18,25 @@ async function fixture(t) {
       }); request.on('error',reject);request.end(body===undefined?undefined:JSON.stringify(body));
     });
   }
-  const desktop=(await request('/api/desktop/open',{})).body;
+  const desktop=(await request('/api/desktop/open',client ? {client} : {})).body;
   const phone=(await request('/api/pair',{code:desktop.code})).body;
   return {request,desktop,phone,advance(ms){now+=ms;},base};
 }
+
+test('paired phone sees standard or preview profile from its own PC, including reconnect status',async t=>{
+  for(const kind of ['standard','preview']) {
+    const client={kind,version:'0.2.28'}, f=await fixture(t,client);
+    assert.deepEqual(f.phone.client,client);
+    assert.deepEqual((await f.request('/api/status',undefined,f.phone.token)).body.client,client);
+    assert.equal((await f.request('/api/status')).status,401);
+  }
+});
+
+test('legacy PC is explicitly unknown and malformed profile text is refused',async t=>{
+  const f=await fixture(t);assert.deepEqual(f.phone.client,{kind:'unknown',version:''});
+  for(const client of [{kind:'standard',version:'<script>'},{kind:'admin',version:'0.2.28'},null])
+    assert.equal((await f.request('/api/desktop/open',{client})).status,400);
+});
 test('HTTPS page config and microphone permission are explicit; no permissive CORS',async t=>{
   const f=await fixture(t),r=await f.request('/api/info');
   assert.deepEqual(r.body,{mode:'internet',voice:true}); assert.equal(r.headers.get('cache-control'),'no-store');

@@ -76,8 +76,9 @@ public sealed class PhoneServer : IAsyncDisposable
     public PhoneNetwork Network => network;
     public string? Problem { get { lock (gate) return storageFailed ? "처리 기록을 저장하지 못해 명령 수신을 중지했어요. PC 저장 공간을 확인한 뒤 연결을 다시 켜세요." : null; } }
     public int Connected { get { lock (gate) return sessions.Values.Count(s => s.Expires > DateTimeOffset.UtcNow); } }
-    public PhoneServer(PhoneNetwork network, string ledgerFile, Func<RemoteCommand, CancellationToken, Task<string>> execute, Func<string, bool>? isStop = null)
-    { this.network = network; ledger = new RemoteLedger(ledgerFile); this.execute = execute; this.isStop = isStop ?? RemoteText.Stop; }
+    public PhoneClientInfo Client { get; }
+    public PhoneServer(PhoneNetwork network, string ledgerFile, Func<RemoteCommand, CancellationToken, Task<string>> execute, Func<string, bool>? isStop = null, bool preview = false)
+    { this.network = network; ledger = new RemoteLedger(ledgerFile); this.execute = execute; this.isStop = isStop ?? RemoteText.Stop; Client = PhoneClientInfo.For(preview); }
 
     public async Task StartAsync(int port = 17845)
     {
@@ -148,7 +149,7 @@ public sealed class PhoneServer : IAsyncDisposable
             switch (request.Method, request.Path.Value)
             {
                 case ("GET", "/api/status"):
-                    await response.WriteAsJsonAsync(new { connected = true, expires = session.Expires }); return;
+                    await response.WriteAsJsonAsync(new { connected = true, expires = session.Expires, client = Client }); return;
                 case ("POST", "/api/command"):
                     await CommandAsync(context, session); return;
                 case ("GET", "/api/result"):
@@ -204,7 +205,7 @@ public sealed class PhoneServer : IAsyncDisposable
             }
         }
         if (session == null) { await Error(context, 409, "최대 4대까지 연결할 수 있어요. PC에서 연결을 초기화하세요."); return; }
-        await context.Response.WriteAsJsonAsync(new { token = session.Token, expires = session.Expires });
+        await context.Response.WriteAsJsonAsync(new { token = session.Token, expires = session.Expires, client = Client });
     }
     static string String(JsonElement json, string key) => json.ValueKind == JsonValueKind.Object && json.TryGetProperty(key, out var item) && item.ValueKind == JsonValueKind.String ? item.GetString() ?? "" : "";
     object View(RemoteReceipt receipt) => new { id = receipt.Id, pending = activeKey == (receipt.Account, receipt.Id), result = activeKey == (receipt.Account, receipt.Id) ? "처리 중이에요…" : receipt.Result };

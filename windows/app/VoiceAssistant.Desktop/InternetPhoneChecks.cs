@@ -17,7 +17,7 @@ public partial class App
         personal = new Personalization(Path.Combine(AppPaths.Home, "personal.json")); timers = new TimerStore(Path.Combine(AppPaths.Home, "timers.json"));
         window = new MainWindow(); overlay = new OverlayWindow(); MainWindow = window; window.LoadSettings(settings); overlay.Configure(settings.Desktop);
     }
-    async Task<int> RunInternetPhoneAppChecksAsync()
+    async Task<int> RunInternetPhoneAppChecksAsync(bool ai = false)
     {
         if (!IsolatedPhoneProfile()) return 2;
         InitializeInternetPhoneFixture();
@@ -35,7 +35,17 @@ public partial class App
             internetPhoneTask = Task.Run(() => pump.RunAsync(connection.Token));
             using var phone = new PhoneProbe(connection.Url); await phone.Pair(connection.Code);
             await Check("Internet HTTPS reaches actual App clock without Pro or a LAN listener", async () =>
-            { var result = await phone.Command("폰시험 지금 몇 시야"); Require(result.Contains("시") && !result.Contains("확인하지 못") && !busy && !settings.ProRemote && phoneServer == null, result); });
+            { var result = await phone.Command("폰시험 지금 몇 시야"); Require(result.Contains("시") && result.Contains("답변 읽기가 꺼져") && !result.Contains("확인하지 못") && !busy && !settings.ProRemote && phoneServer == null, result); });
+            await Check("Internet paired phone identifies a normal App connection", async () =>
+            { var status = (await phone.Request("/api/status")).Data; Require(status.GetProperty("client").GetProperty("kind").GetString() == "standard", "Incorrect client profile"); });
+            await Check("Internet phone creates lists and cancels actual App timers", () => VerifyPhoneTimersAsync(phone));
+            await Check("Internet phone reaches actual Windows speech playback with silent test volume", () => VerifyPhoneSpeechAsync(phone));
+            if (ai) await Check("Internet phone sends a real general question through the saved Codex CLI account", async () =>
+            {
+                var saved = settings;
+                try { settings = settings with { BrainProvider = "codex" }; var result = await phone.Command("2 더하기 3은 얼마야? 계산 결과 숫자만 짧게 답해."); Require(result.Contains("5") && !result.Contains("실패") && !result.Contains("오류"), result); }
+                finally { settings = saved; }
+            });
             await Check("Internet redelivery cannot execute a completed App command twice", async () =>
             {
                 var id = Guid.NewGuid().ToString("N"); await phone.Request("/api/command", new { id, text = "지금 몇 시야" }); var first = await phone.Result(id); var count = calls;
@@ -79,7 +89,7 @@ public partial class App
     {
         if (!IsolatedPhoneProfile()) { Shutdown(2); return; }
         InitializeInternetPhoneFixture();
-        internetPhone = new InternetPhone(); await internetPhone.OpenAsync(); var connection = internetPhone;
+        internetPhone = new InternetPhone(preview: true); await internetPhone.OpenAsync(); var connection = internetPhone;
         var pump = new RemotePump(connection, new RemoteLedger(Path.Combine(AppPaths.Home, "internet-phone-receipts.json")),
             (command, token) => command.Text == "지금 몇 시야" ? Dispatcher.InvokeAsync(() => RunRemoteCommandAsync(command, token, true)).Task.Unwrap() : Task.FromResult("인터넷 시험에서는 ‘지금 몇 시야’만 실행합니다."),
             text => connection.Status = text);

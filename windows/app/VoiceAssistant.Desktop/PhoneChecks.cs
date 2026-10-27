@@ -39,7 +39,7 @@ internal sealed class PhoneProbe(string url) : IDisposable
     }
     public async Task<string> Result(string id)
     {
-        for (int i = 0; i < 150; i++)
+        for (int i = 0; i < 1000; i++)
         {
             var row = await Request("/api/result?id=" + id);
             if (row.Status != HttpStatusCode.OK) throw new Exception("Result failed: " + row.Data);
@@ -162,7 +162,7 @@ public partial class App
         personal = new Personalization(Path.Combine(AppPaths.Home, "personal.json")); timers = new TimerStore(Path.Combine(AppPaths.Home, "timers.json"));
         window = new MainWindow(); overlay = new OverlayWindow(); MainWindow = window; window.LoadSettings(settings); overlay.Configure(settings.Desktop);
         phoneServer = new PhoneServer(PhoneChecks.Loopback, Path.Combine(AppPaths.Home, "phone-receipts.json"),
-            (command, token) => command.Text == "지금 몇 시야" ? Dispatcher.InvokeAsync(() => RunRemoteCommandAsync(command, token, true)).Task.Unwrap() : Task.FromResult("미리 보기에서는 ‘지금 몇 시야’만 실행합니다."));
+            (command, token) => command.Text == "지금 몇 시야" ? Dispatcher.InvokeAsync(() => RunRemoteCommandAsync(command, token, true)).Task.Unwrap() : Task.FromResult("미리 보기에서는 ‘지금 몇 시야’만 실행합니다."), preview: true);
         await phoneServer.StartAsync(0);
         window.QuitRequested += Quit; window.Closing += OnWindowClosing; window.Show();
         phoneWindow = new PhoneWindow(_ => Task.CompletedTask, StopPhoneAsync, () => phoneServer) { Owner = window };
@@ -183,8 +183,27 @@ public partial class App
         try
         {
             await phoneServer.StartAsync(0); using var phone = new PhoneProbe(phoneServer.Url); await phone.Pair(phoneServer.Code);
+            await Check("Phone WPF speech switch persists the shared reading preference without changing other voice options", () =>
+            {
+                var original = settings;
+                var panel = new PhoneWindow(_ => Task.CompletedTask, () => Task.CompletedTask, () => phoneServer, speechEnabled: () => settings.Speak, setSpeech: SetPhoneSpeech);
+                try
+                {
+                    Require(panel.ReadRepliesInput.IsChecked == false, "Initial speech state wrong");
+                    panel.ReadRepliesInput.IsChecked = true;
+                    var saved = SettingsStore.Load(); Require(settings.Speak && saved.Speak && saved.OutputId == original.OutputId && saved.SpeechVolume == original.SpeechVolume, "Speech choice not saved or other voice settings changed");
+                    panel.ReadRepliesInput.IsChecked = false; Require(!settings.Speak && !SettingsStore.Load().Speak, "Reading cannot be turned off");
+                }
+                finally { panel.Close(); }
+                return Task.CompletedTask;
+            });
             await Check("Free phone HTTP reaches actual App clock without a Pro account or enabled Pro setting", async () =>
-            { var result = await phone.Command("폰시험 지금 몇 시야"); Require(result.Contains("시") && !result.Contains("확인하지 못") && !busy && !settings.ProRemote, result); });
+            { var result = await phone.Command("폰시험 지금 몇 시야"); Require(result.Contains("시") && result.Contains("답변 읽기가 꺼져") && !result.Contains("확인하지 못") && !busy && !settings.ProRemote, result); });
+            await Check("Local paired phone identifies a normal App connection", async () =>
+            { var status = (await phone.Request("/api/status")).Data; Require(status.GetProperty("client").GetProperty("kind").GetString() == "standard", "Incorrect client profile"); });
+            await Check("Local phone creates lists and cancels actual App timers", () => VerifyPhoneTimersAsync(phone));
+            await Check("Local phone reaches actual Windows speech playback with silent test volume", () => VerifyPhoneSpeechAsync(phone));
+            await Check("Local phone receives a useful reason when PC speech output fails", () => VerifyPhoneSpeechAsync(phone, true));
             await Check("Free phone retains PC-review restrictions", async () =>
             { Require((await phone.Command("받아쓰기 시작")).Contains("PC에서") && !dictating && !busy, "PC review bypassed"); });
             await Check("Free phone refuses to interrupt ongoing PC work", async () =>
