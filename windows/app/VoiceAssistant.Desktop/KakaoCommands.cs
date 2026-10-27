@@ -38,6 +38,7 @@ public partial class App
 {
     async Task<string> RunKakaoAsync(KakaoCommand command, CancellationToken token)
     {
+        RemoteExecution.Guard(new AssistantAction(command.Kind, command.Text), false);
         overlay.HideOverlay(); var chats = new KakaoChats(hands.KakaoChatDriver());
         var page = await chats.ListAsync("", 0, token);
         if (command.Kind == "kakao_chats") return page.Chats.Count == 0 ? "열린 카카오톡 대화방이 없어요. 사용할 대화방을 먼저 열어 주세요." :

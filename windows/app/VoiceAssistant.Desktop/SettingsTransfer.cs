@@ -80,6 +80,8 @@ public static class SettingsTransfer
     public static UiSettings Prepare(UiSettings imported, UiSettings current, bool connections, bool devices)
     {
         var next = Copy(imported); next.Desktop.SetupComplete = current.Desktop.SetupComplete;
+        // Importing someone else's preferences must not grant access from a phone.
+        next.ProRemote = current.ProRemote;
         if (!connections)
         {
             next.BrainProvider = current.BrainProvider; next.BrainModel = current.BrainModel; next.BrainUrl = current.BrainUrl;

@@ -2,9 +2,13 @@
 
 Sasarisa를 바탕으로 만든 Windows 데스크톱 음성 비서입니다. macOS Swift 앱은 유지하고 Windows용 WPF 앱과 Python 음성 프로세스를 별도로 구현했습니다. 이 버전은 원본의 모든 외부 연동과 동작을 1:1로 재현한 버전은 아닙니다.
 
-Windows 개발은 `windows` 브랜치에서 진행합니다. 현재 소스에는 0.2.22 기능과 작성 중인 `ProRemote.cs`가 포함됩니다. 원격 명령 수신·결과 회신·중복 처리 방지의 기초 코드만 있으며, 앱 실행 흐름·설정 UI 연결과 원격 전용 검증은 아직 없습니다. 휴대폰 원격 기능은 활성화되지 않으며, 보고된 마이크 무반응 문제도 해결 확인이 남아 있습니다.
+Windows 개발은 `windows` 브랜치에서 진행합니다. 원본 기능의 전체 현황은 [이식 점검표](FEATURE_PARITY.md)를 확인하세요. 보고된 마이크 무반응 문제의 해결과 실제 회원 계정·휴대폰 연결 검증은 남아 있습니다.
 
 ## 실행
+
+0.2.23에서 **휴대폰 원격 명령 수신과 결과 회신**을 앱에 연결했습니다. 설정 → 목소리와 출력 장치 → `휴대폰에서 이 PC에 명령 보내기`를 체크하고 설정을 저장합니다. 기본값은 꺼짐이며, Pro 계정 연결과 서버의 원격 이용 권한이 필요합니다. PC 앱이 실행 중일 때 명령과 답변을 Sasarisa 서버로 주고받으며, 수신 포트나 방화벽 예외를 만들지 않습니다. PC에서 새 명령을 입력하면 진행 중인 원격 요청을 중지합니다. 휴대폰에서 `중지`를 보내도 원격 요청을 취소할 수 있습니다.
+
+PC 확인이 필요한 동작은 휴대폰에 미실행 사유를 돌려줍니다. 원본의 자유 모드, Aside를 통한 원격 웹 작업과 실제 회원 계정·휴대폰 왕복 검증은 남아 있습니다. 요청 ID와 짧은 결과는 사용자 데이터 폴더의 `remote-receipts.json`에 저장하여 재전송 때 같은 동작을 반복하지 않습니다. 처리 기록이 손상되거나 저장되지 않거나 5,000건에 도달하면 원격 실행을 멈추고 안내합니다. 설정 가져오기는 기존 원격 켜짐/꺼짐을 바꾸지 않습니다. 계정 창에서 상태를 다시 확인하거나 연결을 바꾼 뒤 닫으면 원격 연결도 다시 확인합니다.
 
 0.2.22에서 **Sasarisa Pro 계정과 음성**을 추가했습니다. 설정 → 목소리와 출력 장치 → `Pro 계정 연결·사용량`에서 코드를 받은 뒤 브라우저에서 연결을 승인합니다. 목소리 제공자로 `Sasarisa Pro`를 선택하면 한국어 3종·영어 2종 목소리를 사용할 수 있습니다. 기기 키는 Windows 자격 증명에 별도로 보관하며 설정 파일·내보내기에 넣지 않습니다. 실제 서버의 코드 발급·취소와 계정이 없을 때 기본 음성으로 전환되는 동작을 확인했습니다. 회원 계정 승인·유료 음성 생성 품질·휴대폰 원격 기능은 별도 검증/구현이 남아 있습니다.
 
@@ -44,7 +48,7 @@ Aside CLI는 [공식 Windows 설치·로그인 안내](https://docs.aside.com/he
 
 바탕화면 **자비스 Windows** 바로가기로 실행합니다. 기본 호출 이름은 **자비스**이며 설정에서 바꿀 수 있습니다.
 
-Windows 10/11 x64용 설치 파일은 `windows/dist/Sasarisa-Windows-0.2.22-x64.msi`입니다. 현재 사용자의 계정에 설치하며 Python과 .NET 실행 환경을 포함합니다. 별도 개발 도구는 필요하지 않습니다. 기본 위치는 `%LOCALAPPDATA%\SasarisaWindows`이고 시작 메뉴와 바탕화면에 바로가기를 만듭니다. 유튜브 창에는 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)이 필요합니다.
+Windows 10/11 x64용 설치 파일은 `windows/dist/Sasarisa-Windows-0.2.23-x64.msi`입니다. 현재 사용자의 계정에 설치하며 Python과 .NET 실행 환경을 포함합니다. 별도 개발 도구는 필요하지 않습니다. 기본 위치는 `%LOCALAPPDATA%\SasarisaWindows`이고 시작 메뉴와 바탕화면에 바로가기를 만듭니다. 유튜브 창에는 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)이 필요합니다.
 
 처음 설정의 **한국어 모델 받기 / 복구**에서 약 133 MB를 받습니다. 진행률·취소·재시도를 지원하며 모든 파일의 크기와 SHA-256을 확인한 뒤 적용합니다. 이미 받은 모델은 인터넷 없이 사용할 수 있습니다. 마이크는 **듣기 시작**을 누를 때 켜집니다. AI 대화는 선택한 제공자의 로그인·키 또는 로컬 모델이 별도로 필요합니다.
 
@@ -66,7 +70,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 
 `setup.ps1`은 가상환경·모델 준비, 의존성 검사, Release 빌드와 개발용 바탕화면 바로가기 생성을 수행합니다. 소스 실행은 `windows\run.cmd`를 사용합니다. 소스 폴더를 옮기면 `install-shortcut.ps1`을 다시 실행하세요. 설치본의 바로가기와 이름이 같으므로 개발용 바로가기를 만들면 설치본 바로가기를 대체합니다.
 
-설치 패키지 빌드: 개발 환경 준비 후 `powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1 -Version 0.2.22`. 공식 Python 임베디드 배포의 해시·게시자를 확인하고 고정된 wheel 해시를 검사합니다. WiX 4.0.6은 프로젝트 NuGet 의존성으로 복원합니다. 결과는 `dist`에 MSI·SHA-256·빌드 정보로 기록합니다.
+설치 패키지 빌드: 개발 환경 준비 후 `powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1 -Version 0.2.23`. 공식 Python 임베디드 배포의 해시·게시자를 확인하고 고정된 wheel 해시를 검사합니다. WiX 4.0.6은 프로젝트 NuGet 의존성으로 복원합니다. 결과는 `dist`에 MSI·SHA-256·빌드 정보로 기록합니다.
 
 ## 처음 사용하기
 

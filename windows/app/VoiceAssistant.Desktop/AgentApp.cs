@@ -14,6 +14,7 @@ public partial class App
         var requestSettings = settings;
         if (requestSettings.BrainProvider == "aside")
         {
+            if (RemoteExecution.Current != null) throw new AgentStoppedException("Aside 웹 작업은 현재 PC에서 요청해야 해요. 휴대폰 원격 연결은 아직 지원하지 않습니다.");
             void Progress(string value) => Dispatcher.BeginInvoke(() =>
             {
                 if (token.IsCancellationRequested || closing) return;
@@ -92,6 +93,7 @@ public partial class App
         }
         async Task<bool> Approve(AssistantAction action, CancellationToken cancellation)
             {
+                RemoteExecution.Guard(action, true);
                 await Guard(action);
                 if (action.Kind == "display_off") return ActionApprovalWindow.Confirm(window, AgentRun.Describe(action), cancellation);
                 if (action.Kind is "kakao_draft" or "kakao_send" or "kakao_send_draft")
@@ -122,6 +124,7 @@ public partial class App
             }
         async Task<ActionOutcome> Execute(AssistantAction action, CancellationToken cancellation)
             {
+                RemoteExecution.Guard(action, true);
                 cancellation.ThrowIfCancellationRequested();
                 await Guard(action);
                 if (action.Kind is "open_app" or "open_url" or "type" or "key" or "tap" or "browser" or "press_control" or "fill_field" or "insert_field" or "click") windows.Invalidate();

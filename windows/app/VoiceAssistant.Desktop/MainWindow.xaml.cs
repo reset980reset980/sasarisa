@@ -23,6 +23,7 @@ public sealed record UiSettings
     public bool Kws { get; set; } = true;
     public double KeywordThreshold { get; set; } = 0.15;
     public bool Speak { get; set; } = true;
+    public bool ProRemote { get; set; }
     public bool PauseInCalls { get; set; } = true;
     public string BargeIn { get; set; } = "auto";
     public string VoiceId { get; set; } = "";
@@ -65,6 +66,7 @@ public partial class MainWindow : Window
     public event Action<string, DeviceOption>? NameTrainingRequested;
     public event Action? RefreshDevicesRequested;
     public event Action? QuitRequested;
+    public event Action? ProAccountChanged;
 
     public MainWindow()
     {
@@ -99,6 +101,7 @@ public partial class MainWindow : Window
 
     public void AddMessage(string role, string text) => OnUi(() =>
     {
+        RemoteExecution.Current?.Capture(role, text);
         if (string.IsNullOrWhiteSpace(text)) return;
         WelcomeCard.Visibility = Visibility.Collapsed;
         bool isUser = role.Equals("user", StringComparison.OrdinalIgnoreCase) || role == "나" || role == "사용자";
@@ -108,7 +111,7 @@ public partial class MainWindow : Window
         var header = new Grid { Margin = new Thickness(0, 0, 0, 8) };
         header.Children.Add(new TextBlock
         {
-            Text = isUser ? "나" : isError ? "확인이 필요해요" : isSystem ? "안내" : _assistantName,
+            Text = isUser ? (RemoteExecution.Current != null ? "휴대폰" : "나") : isError ? "확인이 필요해요" : isSystem ? "안내" : _assistantName,
             Tag = !isUser && !isError && !isSystem ? "assistant-role" : null,
             FontSize = 10,
             FontWeight = FontWeights.SemiBold,
@@ -176,6 +179,7 @@ public partial class MainWindow : Window
         KwsInput.IsChecked = settings.Kws;
         ThresholdInput.Text = settings.KeywordThreshold.ToString("0.###", CultureInfo.InvariantCulture);
         SpeakInput.IsChecked = settings.Speak;
+        ProRemoteInput.IsChecked = settings.ProRemote;
         PauseInCallsInput.IsChecked = settings.PauseInCalls;
         SelectTag(BargeInInput, settings.BargeIn);
         SetSpeechOptions(VoiceInput, SpeechOutput.Options(false), settings.VoiceId);
@@ -206,6 +210,7 @@ public partial class MainWindow : Window
 
     public void SetTimerNotice(string text) => OnUi(() => TimerNotice.Text = text);
     public void SetBrainStatus(string text) => OnUi(() => BrainStatusText.Text = text);
+    public void SetRemoteStatus(string text) => OnUi(() => ProRemoteStatus.Text = text);
     public void SetHotkeyHint(string chord, string stopChord = "Ctrl+Alt+Backspace") => OnUi(() =>
     {
         _hotkeyChord = chord?.Trim() ?? "";
@@ -368,6 +373,7 @@ public partial class MainWindow : Window
             Kws = KwsInput.IsChecked == true,
             KeywordThreshold = threshold,
             Speak = SpeakInput.IsChecked == true,
+            ProRemote = ProRemoteInput.IsChecked == true,
             PauseInCalls = PauseInCallsInput.IsChecked == true,
             BargeIn = (BargeInInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "auto",
             VoiceId=speech.VoiceId, OutputId=speech.OutputId, SpeechRate=speech.SpeechRate, SpeechVolume=speech.SpeechVolume,Tts=speech.Tts,

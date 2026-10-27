@@ -59,7 +59,7 @@ public sealed partial class ProAccountClient : IDisposable, IRemoteTransport
         pollInterval = pollDelay ?? TimeSpan.FromSeconds(2); linkTimeout = linkLimit ?? TimeSpan.FromMinutes(10);
         requestTimeout = requestLimit ?? TimeSpan.FromSeconds(15);
     }
-    public bool Linked { get { lock (gate) return !disposed && !quarantine && read() != null; } }
+    public bool Linked { get { lock (gate) return !disposed && !quarantine && ValidKey(read()); } }
     public ProStatus? Status { get { lock (gate) return status; } }
     static bool ValidKey(string? key) => key is { Length: 64 } && key.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-');
     void CheckAlive() { ObjectDisposedException.ThrowIf(disposed, this); }

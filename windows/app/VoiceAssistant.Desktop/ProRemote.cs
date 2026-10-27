@@ -20,6 +20,7 @@ public sealed class RemoteUnavailable(string message, TimeSpan retry) : InvalidO
 public interface IRemoteTransport
 {
     bool Linked { get; }
+    string AccountIdentity { get; }
     Task<RemoteCommand?> NextAsync(CancellationToken token);
     Task<bool> ReplyAsync(RemoteReceipt receipt, CancellationToken token);
 }
@@ -37,6 +38,7 @@ public static class RemoteText
 public sealed partial class ProAccountClient
 {
     static string Identity(string key) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+    public string AccountIdentity { get { lock (gate) { var key = disposed || quarantine ? null : read(); return ValidKey(key) ? Identity(key!) : ""; } } }
     public async Task<RemoteCommand?> NextAsync(CancellationToken token)
     {
         var session = Current();
@@ -85,13 +87,15 @@ public sealed class RemoteLedger
             throw new InvalidOperationException("휴대폰 처리 기록을 확인하지 못해 원격 연결을 중지했어요.");
     }
     public IReadOnlyList<RemoteReceipt> Pending { get { lock (gate) return rows.Where(x => !x.Acknowledged).ToArray(); } }
+    public RemoteReceipt? Find(string account, string id) { lock (gate) return rows.Find(x => x.Account == account && x.Id == id); }
     void Save(List<RemoteReceipt> next)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(file))!; Directory.CreateDirectory(directory);
         var temp = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temp, JsonSerializer.Serialize(next), new UTF8Encoding(false));
+            using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            { var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(next)); output.Write(bytes); output.Flush(true); }
             if (File.Exists(file)) File.Replace(temp, file, file + ".previous"); else File.Move(temp, file);
             rows = next;
         }
@@ -127,14 +131,16 @@ public sealed class RemoteLedger
 // Other commands get a busy result instead of silently replacing a task or building an unbounded queue.
 public sealed class RemotePump(IRemoteTransport transport, RemoteLedger ledger,
     Func<RemoteCommand, CancellationToken, Task<string>> execute, Action<string> status,
-    Func<string, bool>? isStop = null, TimeSpan? requestLimit = null)
+    Func<string, bool>? isStop = null, TimeSpan? requestLimit = null, TimeSpan? retryInterval = null)
 {
     readonly object gate = new();
     CancellationTokenSource? active;
-    string? activeId;
+    (string Account, string Id)? activeKey;
     readonly List<Task> work = new();
-    public async Task RunAsync(CancellationToken token)
+    public async Task RunAsync(CancellationToken cancellation)
     {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        var token = lifetime.Token;
         var nextRetry = DateTimeOffset.MinValue;
         try
         {
@@ -142,23 +148,27 @@ public sealed class RemotePump(IRemoteTransport transport, RemoteLedger ledger,
             {
                 token.ThrowIfCancellationRequested();
                 if (!transport.Linked) { status("계정을 연결하면 휴대폰 명령을 기다립니다."); await Task.Delay(2000, token); continue; }
-                if (DateTimeOffset.UtcNow >= nextRetry)
-                {
-                    foreach (var receipt in ledger.Pending.Take(20))
-                    {
-                        lock (gate) if (receipt.Id == activeId) continue;
-                        await Publish(receipt, token);
-                    }
-                    nextRetry = DateTimeOffset.UtcNow.AddSeconds(20);
-                }
                 try
                 {
+                    if (DateTimeOffset.UtcNow >= nextRetry)
+                    {
+                        foreach (var receipt in ledger.Pending.Where(r => r.Account == transport.AccountIdentity).Take(20))
+                        {
+                            lock (gate) if ((receipt.Account, receipt.Id) == activeKey) continue;
+                            await Publish(receipt, token);
+                        }
+                        nextRetry = DateTimeOffset.UtcNow.Add(retryInterval ?? TimeSpan.FromSeconds(20));
+                    }
                     var command = await transport.NextAsync(token);
-                    if (command == null) { status("휴대폰 명령을 기다리고 있어요."); await Task.Delay(500, token); continue; }
+                    if (command == null) { lock (gate) if (active == null) status("휴대폰 명령을 기다리고 있어요."); await Task.Delay(500, token); continue; }
                     token.ThrowIfCancellationRequested(); command.Lease.ThrowIfCancellationRequested();
-                    work.RemoveAll(t => t.IsCompleted);
-                    if (work.Count >= 24) await Task.WhenAny(work).WaitAsync(token);
-                    work.Add(Handle(command, token));
+                    foreach (var completed in work.Where(t => t.IsCompleted).ToArray()) { await completed; work.Remove(completed); }
+                    if (work.Count >= 24)
+                    {
+                        await Task.WhenAny(work).WaitAsync(token);
+                        foreach (var completed in work.Where(t => t.IsCompleted).ToArray()) { await completed; work.Remove(completed); }
+                    }
+                    work.Add(Handle(command, lifetime));
                 }
                 catch (RemoteUnavailable ex) { status(ex.Message); await Task.Delay(ex.Retry, token); }
                 catch (OperationCanceledException) when (!token.IsCancellationRequested) { status("계정 연결이 변경됐어요."); await Task.Delay(1000, token); }
@@ -167,8 +177,11 @@ public sealed class RemotePump(IRemoteTransport transport, RemoteLedger ledger,
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { status("휴대폰 처리 기록을 저장하지 못해 원격 연결을 중지했어요. 저장 공간과 권한을 확인하세요."); }
         finally
         {
+            lifetime.Cancel();
             lock (gate) active?.Cancel();
             try { await Task.WhenAll(work).WaitAsync(TimeSpan.FromSeconds(12)); }
             catch (Exception ex) when (ex is OperationCanceledException or TimeoutException) { }
@@ -176,19 +189,26 @@ public sealed class RemotePump(IRemoteTransport transport, RemoteLedger ledger,
     }
     async Task Publish(RemoteReceipt receipt, CancellationToken token)
     {
+        lock (gate)
+        {
+            if (activeKey == (receipt.Account, receipt.Id)) return;
+            receipt = ledger.Find(receipt.Account, receipt.Id) ?? throw new InvalidOperationException("Missing remote receipt");
+        }
         try { if (await transport.ReplyAsync(receipt, token)) ledger.Acknowledge(receipt); }
         catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException or TimeoutException or HttpRequestException) { }
     }
-    async Task Handle(RemoteCommand command, CancellationToken token)
+    async Task Handle(RemoteCommand command, CancellationTokenSource lifetime)
     {
+        var token = lifetime.Token;
         RemoteReceipt receipt;
         try
         {
             token.ThrowIfCancellationRequested(); command.Lease.ThrowIfCancellationRequested();
+            if (command.Account != transport.AccountIdentity) return;
             var claimed = ledger.Claim(command); receipt = claimed.Receipt;
             if (!claimed.Fresh)
             {
-                lock (gate) if (activeId == receipt.Id) return;
+                lock (gate) if (activeKey == (receipt.Account, receipt.Id)) return;
                 await Publish(receipt, token); return;
             }
             if ((isStop ?? RemoteText.Stop)(command.Text))
@@ -203,19 +223,23 @@ public sealed class RemotePump(IRemoteTransport transport, RemoteLedger ledger,
                 if (active == null)
                 {
                     own = CancellationTokenSource.CreateLinkedTokenSource(token, command.Lease);
-                    own.CancelAfter(requestLimit ?? TimeSpan.FromMinutes(5)); active = own; activeId = command.Id;
+                    own.CancelAfter(requestLimit ?? TimeSpan.FromMinutes(5)); active = own; activeKey = (command.Account, command.Id);
                 }
             }
             if (own == null) { receipt = ledger.Complete(receipt, "다른 휴대폰 요청을 처리 중이에요. 끝난 뒤 다시 요청하거나 ‘중지’라고 보내 주세요."); await Publish(receipt, token); return; }
-            string result;
-            try { own.Token.ThrowIfCancellationRequested(); status("휴대폰 요청을 처리 중이에요."); result = await execute(command, own.Token); }
-            catch (OperationCanceledException) { result = "요청을 중지했거나 처리 시간이 초과됐어요. 이미 실행된 동작은 화면에서 확인하세요."; }
-            catch (Exception) { result = "요청을 마치지 못했어요. PC의 비서 화면에서 오류를 확인하세요."; }
-            finally { lock (gate) if (active == own) { active = null; activeId = null; } own.Dispose(); }
-            receipt = ledger.Complete(receipt, result); await Publish(receipt, token);
+            try
+            {
+                string result;
+                try { own.Token.ThrowIfCancellationRequested(); status("휴대폰 요청을 처리 중이에요."); result = await execute(command, own.Token); }
+                catch (OperationCanceledException) { result = "요청을 중지했거나 처리 시간이 초과됐어요. 이미 실행된 동작은 화면에서 확인하세요."; }
+                catch (Exception) { result = "요청을 마치지 못했어요. PC의 비서 화면에서 오류를 확인하세요."; }
+                receipt = ledger.Complete(receipt, result);
+            }
+            finally { lock (gate) if (active == own) { active = null; activeKey = null; } own.Dispose(); }
+            await Publish(receipt, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || command.Lease.IsCancellationRequested) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { status("휴대폰 처리 기록을 저장하지 못했어요. 해당 요청은 자동으로 다시 실행하지 않습니다."); }
+        { status("휴대폰 처리 기록을 저장하지 못해 원격 연결을 중지했어요. 저장 공간과 권한을 확인하세요."); lifetime.Cancel(); }
     }
 }

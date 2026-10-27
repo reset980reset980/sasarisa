@@ -14,7 +14,9 @@ public partial class MainWindow
     void ProAccount_Click(object sender, RoutedEventArgs e)
     {
         StopRequested?.Invoke();
-        new ProAccountWindow(NameInput.Text.Trim()) { Owner = this }.ShowDialog();
+        void Open() => new ProAccountWindow(NameInput.Text.Trim()) { Owner = this }.ShowDialog();
+        if (SettingsFileRequested != null) SettingsFileRequested.Invoke(Open); else Open();
+        ProAccountChanged?.Invoke();
     }
 }
 
