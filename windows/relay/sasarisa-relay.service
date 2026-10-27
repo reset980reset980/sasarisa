@@ -1,0 +1,21 @@
+[Unit]
+Description=Sasarisa phone HTTPS relay
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/reset980/project/sasarisa-relay
+Environment=PUBLIC_ORIGIN=https://sasarisa.xsw.kr
+Environment=WEB_ROOT=/home/reset980/project/sasarisa-relay/web
+Environment=SOURCE_ARCHIVE=/home/reset980/project/sasarisa-relay/source.zip
+Environment=PORT=17846
+ExecStart=/usr/bin/node /home/reset980/project/sasarisa-relay/server.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+MemoryMax=160M
+
+[Install]
+WantedBy=default.target

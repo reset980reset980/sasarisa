@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the Sasarisa relay route
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=60
+Unit=sasarisa-relay-route.service
+
+[Install]
+WantedBy=timers.target

@@ -118,6 +118,8 @@ public sealed class PhoneServer : IAsyncDisposable
             { await Error(context, 403, "이 PC의 로컬 주소로 다시 연결하세요."); return; }
             if (request.Headers.TryGetValue("Origin", out var origin) && origin.ToString() != "http://" + authority)
             { await Error(context, 403, "다른 사이트에서 보낸 요청은 받지 않습니다."); return; }
+            if (request.Method == "GET" && request.Path == "/api/info")
+            { await response.WriteAsJsonAsync(new { mode = "local", voice = false }); return; }
             if (request.Method == "GET" && request.Path == "/source.zip")
             {
                 var source = Path.Combine(AppPaths.WindowsRoot, "Sasarisa-Windows-Source.zip");

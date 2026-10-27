@@ -24,6 +24,7 @@ def package(stage, root, version, wix):
         paths += list((root / "runtime").glob("*.py")) + list((root / "runtime").glob("*.txt"))
         paths += list((root / "poc").glob("*.py")) + list((root / "poc").glob("*.ps1")) + list((root / "poc").glob("*.txt"))
         paths += list((root / "installer").glob("*.wxs")) + list((root / "installer").glob("*.wixproj"))
+        paths += [p for p in (root / "relay").glob("*") if p.is_file() and p.suffix in {".mjs", ".py", ".md", ".service", ".timer", ".json"}]
         paths += [p for p in (root / "app").rglob("*") if p.is_file() and not {"bin", "obj"}.intersection(p.relative_to(root).parts) and (p.suffix in {".cs", ".xaml", ".csproj", ".manifest", ".ico", ".html", ".css", ".js"} or p.name.endswith("-LICENSE.txt"))]
         for path in sorted(set(paths)):
             archive.write(path, "windows/" + path.relative_to(root).as_posix())

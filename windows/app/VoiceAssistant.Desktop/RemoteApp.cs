@@ -77,7 +77,7 @@ public partial class App
     async Task<string> RunRemoteCommandAsync(RemoteCommand command, CancellationToken token, bool localPhone = false)
     {
         token.ThrowIfCancellationRequested();
-        if (closing || (localPhone ? phoneServer == null : !settings.ProRemote)) return "이 PC의 휴대폰 원격 연결이 꺼져 있어요.";
+        if (closing || (localPhone ? phoneServer == null && internetPhone?.Linked != true : !settings.ProRemote)) return "이 PC의 휴대폰 원격 연결이 꺼져 있어요.";
         if (busy || speaking || starting || dictating || holding || (listening && awakeUntil > DateTimeOffset.Now) || personalEditorOpen || setupWindow != null || !window.IsEnabled)
             return "PC에서 다른 작업을 처리 중이에요. 끝난 뒤 다시 요청해 주세요.";
         var text = LearnedNames.Strip(command.Text, settings);

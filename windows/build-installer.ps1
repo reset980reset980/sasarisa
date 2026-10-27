@@ -1,4 +1,4 @@
-param([string]$Version = '0.2.25')
+param([string]$Version = '0.2.26')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be major.minor.build' }
 $root = $PSScriptRoot

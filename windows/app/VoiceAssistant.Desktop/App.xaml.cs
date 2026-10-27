@@ -45,6 +45,8 @@ public partial class App : System.Windows.Application
         if (e.Args.FirstOrDefault() == "--microphone-peer") { Shutdown(await MicrophoneChecks.RunPeerAsync(e.Args)); return; }
         if (e.Args.FirstOrDefault() == "--microphone-status") { Shutdown(await MicrophoneChecks.SnapshotAsync()); return; }
         if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
+        if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--phone-app-only")) { Shutdown(await RunPhoneAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--grow-app-only")) { Shutdown(await RunGrowAppChecksAsync()); return; }
