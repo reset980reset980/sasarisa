@@ -24,6 +24,7 @@ public sealed record UiSettings
     public double KeywordThreshold { get; set; } = 0.15;
     public bool Speak { get; set; } = true;
     public bool ProRemote { get; set; }
+    public string GrowTogether { get; set; } = "off";
     public bool PauseInCalls { get; set; } = true;
     public string BargeIn { get; set; } = "auto";
     public string VoiceId { get; set; } = "";
@@ -180,6 +181,7 @@ public partial class MainWindow : Window
         ThresholdInput.Text = settings.KeywordThreshold.ToString("0.###", CultureInfo.InvariantCulture);
         SpeakInput.IsChecked = settings.Speak;
         ProRemoteInput.IsChecked = settings.ProRemote;
+        SelectTag(GrowTogetherInput, settings.GrowTogether);
         PauseInCallsInput.IsChecked = settings.PauseInCalls;
         SelectTag(BargeInInput, settings.BargeIn);
         SetSpeechOptions(VoiceInput, SpeechOutput.Options(false), settings.VoiceId);
@@ -211,6 +213,7 @@ public partial class MainWindow : Window
     public void SetTimerNotice(string text) => OnUi(() => TimerNotice.Text = text);
     public void SetBrainStatus(string text) => OnUi(() => BrainStatusText.Text = text);
     public void SetRemoteStatus(string text) => OnUi(() => ProRemoteStatus.Text = text);
+    public void SetGrowStatus(string text) => OnUi(() => GrowTogetherStatus.Text = text);
     public void SetHotkeyHint(string chord, string stopChord = "Ctrl+Alt+Backspace") => OnUi(() =>
     {
         _hotkeyChord = chord?.Trim() ?? "";
@@ -374,6 +377,7 @@ public partial class MainWindow : Window
             KeywordThreshold = threshold,
             Speak = SpeakInput.IsChecked == true,
             ProRemote = ProRemoteInput.IsChecked == true,
+            GrowTogether = SelectedTag(GrowTogetherInput),
             PauseInCalls = PauseInCallsInput.IsChecked == true,
             BargeIn = (BargeInInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "auto",
             VoiceId=speech.VoiceId, OutputId=speech.OutputId, SpeechRate=speech.SpeechRate, SpeechVolume=speech.SpeechVolume,Tts=speech.Tts,

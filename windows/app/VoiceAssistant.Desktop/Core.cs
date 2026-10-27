@@ -52,6 +52,7 @@ public static class SettingsStore
         s.LearnedWakes ??= new(); LearnedNames.Validate(s.LearnedWakes);
         if (s.Activation is not ("voice" or "hotkey" or "hold")) throw new ArgumentException("호출 방식을 확인하세요.");
         if (s.BargeIn is not ("auto" or "any" or "wake" or "off")) throw new ArgumentException("답변 중 끼어들기 방식을 확인하세요.");
+        if (s.GrowTogether is not ("off" or "solo" or "together")) throw new ArgumentException("공유 학습 방식을 확인하세요.");
         if(s.SpeechRate< -5||s.SpeechRate>5||s.SpeechVolume<0||s.SpeechVolume>100)throw new ArgumentException("답변 속도는 -5~5, 음량은 0~100으로 입력하세요.");
         if (s.SilenceSeconds < 0.4 || s.SilenceSeconds > 3 || !double.IsFinite(s.SilenceSeconds)) throw new ArgumentException("말 끝 대기는 0.4~3초입니다.");
         if (s.FollowUpSeconds < 5 || s.FollowUpSeconds > 120 || !double.IsFinite(s.FollowUpSeconds)) throw new ArgumentException("대화 유지 시간은 5~120초입니다.");

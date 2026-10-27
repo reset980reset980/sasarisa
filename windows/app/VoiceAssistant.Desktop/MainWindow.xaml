@@ -202,6 +202,18 @@
                         <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="13" Padding="22" Margin="0,0,0,10">
                             <StackPanel>
                             <StackPanel Margin="0,0,0,22"><TextBlock Text="기억과 실행 방법" FontSize="17" FontWeight="SemiBold" /><TextBlock Text="저장한 기억, 여러 동작을 묶은 루틴, AI에게 배운 실행 방법을 확인하고 고치세요." Style="{StaticResource HelpText}" Margin="0,8,0,10" /><Button Content="기억·루틴·배운 말 관리" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="12,8" Click="Personal_Click" /></StackPanel>
+                            <Expander Header="다 같이 키우기" FontWeight="SemiBold" IsExpanded="False" Margin="0,0,0,18">
+                                <StackPanel Margin="0,14,0,0" TextElement.FontWeight="Normal">
+                                    <ComboBox x:Name="GrowTogetherInput" AutomationProperties.Name="공유 학습 방식" SelectedIndex="0">
+                                        <ComboBoxItem Content="끄기 · 이 PC에서만 배우기" Tag="off" />
+                                        <ComboBoxItem Content="혼자 키우기 · 공유 명령만 받기" Tag="solo" />
+                                        <ComboBoxItem Content="다 같이 키우기 · 짧은 명령 공유하고 받기" Tag="together" />
+                                    </ComboBox>
+                                    <TextBlock Text="설정을 저장하면 적용됩니다. ‘다 같이 키우기’는 앞으로 이 PC에서 AI에게 배운 표현 중 소리·재생·기본 앱 이름 등 허용된 명령 단어로만 된 짧은 말과 실행 명령을 원본 서비스(maker.buffm.com)에 보냅니다. 임의의 단어가 든 표현은 공유하지 않습니다. 음성·답변·화면·파일·기억·검색어·등록 앱·휴대폰 요청은 보내지 않습니다. 무작위 설치 식별자를 사용하며 계정 키는 보내지 않습니다." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,10,0,8" />
+                                    <TextBlock Text="공유 명령은 약 하루에 한 번 갱신하고, 직접 배운 말과 기본 명령을 먼저 사용합니다. 공유 표현으로 실행한 직후 30초 안에 ‘아니’ 또는 ‘틀렸어’라고 하면 그 표현을 제외합니다. 끄면 통신과 공유 명령 사용이 중단되며, 이미 서버에 보낸 항목을 삭제하는 기능은 없습니다." Style="{StaticResource HelpText}" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="GrowTogetherStatus" Text="공유 학습 꺼짐 · 이 PC에서만 배워요." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,10,0,0" AutomationProperties.Name="공유 학습 상태" />
+                                </StackPanel>
+                            </Expander>
                             <Expander Header="내 앱 등록" FontWeight="SemiBold" IsExpanded="False" Margin="0,0,0,18">
                                 <StackPanel Margin="0,18,0,0" TextElement.FontWeight="Normal">
                                     <TextBlock Text="자주 쓰는 앱을 부르기 쉬운 이름으로 등록하세요. 등록·수정은 즉시 저장됩니다." Style="{StaticResource HelpText}" />

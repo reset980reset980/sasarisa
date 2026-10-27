@@ -45,6 +45,7 @@ public partial class App : System.Windows.Application
         if (e.Args.FirstOrDefault() == "--microphone-peer") { Shutdown(await MicrophoneChecks.RunPeerAsync(e.Args)); return; }
         if (e.Args.FirstOrDefault() == "--microphone-status") { Shutdown(await MicrophoneChecks.SnapshotAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--grow-app-only")) { Shutdown(await RunGrowAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test")) { Shutdown(await Checks.RunAsync(e.Args)); return; }
         if (e.Args.Contains("--quit") || e.Args.Contains("--prepare-update"))
         {
@@ -101,6 +102,7 @@ public partial class App : System.Windows.Application
         if (!settings.Desktop.SetupComplete || !SetupReadiness.HasSpeechEnvironment) ShowSetup();
         if (e.Args.Contains("--listen")) StartListening();
         RestartRemote();
+        RestartGrow();
     }
     void OnWindowClosing(object? sender, CancelEventArgs e) { if (!closing) { e.Cancel = true; window.Hide(); } }
     void ShowPersonal()
@@ -165,6 +167,7 @@ public partial class App : System.Windows.Application
             overlayPreviewUntil = DateTimeOffset.MinValue; overlay.Configure(settings.Desktop);
             window.LoadSettings(settings); window.SetBrainStatus(Brain.StatusFor(settings.BrainProvider)); window.AddMessage("system", "설정을 저장했어요.");
             RestartRemote();
+            RestartGrow();
             if (resume) StartListening(); else RefreshStatus(); return null;
         }
         catch (Exception ex) { ShowError(ex.Message); return ex.Message; }
@@ -310,7 +313,8 @@ public partial class App : System.Windows.Application
                 var kakaoReply = await RunKakaoAsync(kakaoCommand, token);
                 token.ThrowIfCancellationRequested(); window.AddMessage("assistant", kakaoReply); await SayAsync(kakaoReply, token); return;
             }
-            parsed = personal.Resolve(text) ?? parsed;
+            parsed = ResolveWithShared(text, parsed, out var sharedUsed);
+            if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", "멈췄어요."); return; }
             if (parsed == null)
             {
                 window.SetStatus("생각하는 중", Brain.NameFor(settings.BrainProvider)+"에 연결하고 있어요.", listening, true);
@@ -319,7 +323,7 @@ public partial class App : System.Windows.Application
                 var run = await RunAiAsync(text, screen, token);
                 token.ThrowIfCancellationRequested();
                 if (run.Finished) brain.RememberTurn(text, run.Reply);
-                if (run.LearningPlan is { } learned) personal.Learn(text, learned);
+                if (run.LearningPlan is { } learned) { personal.Learn(text, learned); RecordSharedLearning(text, learned); }
                 parsed = new(run.Reply, Array.Empty<AssistantAction>());
             }
             token.ThrowIfCancellationRequested(); foreach (var action in parsed.Actions) { ActionPolicy.Validate(action); RemoteExecution.Guard(action, false); }
@@ -340,6 +344,7 @@ public partial class App : System.Windows.Application
                 if (!approved) { window.AddMessage("assistant", "실행을 취소했어요."); return; }
             }
             foreach (var action in parsed.Actions) { token.ThrowIfCancellationRequested(); var result=await ExecuteAsync(action, token, localKeyTarget, localKeyFocus); if(result!=null&&parsed.Actions.Count==1)parsed=parsed with{Reply=result};AppPaths.Log("action", JsonSerializer.Serialize(action)); }
+            if (sharedUsed != null && RemoteExecution.Current == null) lastShared = (sharedUsed, DateTimeOffset.UtcNow);
             window.AddMessage("assistant", parsed.Reply); overlay.SetContent(settings.Name, parsed.Reply, false); if (greetingWindow == null) overlay.ShowOverlay(); overlayUntil = DateTimeOffset.Now.AddSeconds(8); AppPaths.Log("reply", parsed.Reply);
             await SayAsync(parsed.Reply, token);
         }
@@ -534,7 +539,9 @@ public partial class App : System.Windows.Application
         if (closing) return;
         closing = true; StopTurn(); tick?.Stop(); input.Dispose(); output.Dispose();
         window.SetStatus("종료하는 중", "진행 중인 작업을 멈추고 있어요.", false, true); window.IsEnabled = false;
+        var stopGrow = StopGrowAsync();
         await StopRemoteAsync();
+        await stopGrow;
         if (!await brain.WaitForAsideStopAsync()) AppPaths.Log("aside-stop", "앱 종료 제한 시간 안에 Aside 작업 중지를 확인하지 못했어요.");
         videoWindow?.Close(); tray?.Dispose(); Native.UnregisterHotKey(handle, 1); Native.UnregisterHotKey(handle, 2); overlay.Close(); window.Close(); Shutdown();
     }
