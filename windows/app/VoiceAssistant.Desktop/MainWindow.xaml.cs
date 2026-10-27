@@ -68,6 +68,8 @@ public partial class MainWindow : Window
     public event Action? RefreshDevicesRequested;
     public event Action? QuitRequested;
     public event Action? ProAccountChanged;
+    public event Action? PhoneRequested;
+    void Phone_Click(object sender, RoutedEventArgs e) => PhoneRequested?.Invoke();
 
     public MainWindow()
     {

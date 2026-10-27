@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#142238"><title>자비스 · 휴대폰 연결</title><link rel="stylesheet" href="/phone.css"><script src="/phone.js" defer></script></head>
+<body><main>
+<header><span class="mark" aria-hidden="true">J</span><div><p class="eyebrow">WINDOWS ASSISTANT</p><h1>내 PC에 부탁하기</h1></div><span class="tag">로컬 연결</span></header>
+<p class="intro">같은 와이파이에서 PC의 자비스와 연결합니다.</p>
+<section id="pairPanel" class="card"><h2>PC와 연결</h2><p>PC의 <b>휴대폰 연결 · 무료</b> 화면에 표시된 8자리 코드를 입력하세요.</p><form id="pairForm"><label for="code">연결 코드</label><input id="code" type="text" inputmode="numeric" autocomplete="off" maxlength="8" pattern="[0-9]{8}" placeholder="8자리 숫자" required><button id="pairButton" type="submit">연결하기</button></form><p class="hint">코드는 발급 후 10분 동안 유효합니다.</p></section>
+<section id="chatPanel" hidden><div class="connection"><span>● PC 연결됨</span><button id="logout" class="subtle" type="button">연결 끊기</button></div><div id="messages" role="log" aria-live="polite"><article class="answer">무엇을 도와드릴까요?<br>명령을 입력하거나 휴대폰 키보드의 마이크로 말해 보세요.</article></div><div class="suggestions"><button type="button" data-command="지금 몇 시야">지금 몇 시야</button><button type="button" data-command="메모장 열어">메모장 열어</button><button type="button" data-command="할 수 있는 일 알려줘">할 수 있는 일</button></div><form id="commandForm" class="composer"><label for="command">PC에 보낼 명령</label><textarea id="command" rows="3" maxlength="300" placeholder="예: 5분 타이머 맞춰 줘" required></textarea><div class="actions"><button id="stop" class="secondary" type="button">요청 중지</button><button id="send" type="submit">보내기 ↗</button></div></form></section>
+<p id="notice" role="status" aria-live="polite"></p><button id="retry" class="secondary" type="button" hidden>같은 요청 다시 확인</button>
+<footer>PC와 자비스 앱을 켜 두세요. 연결 기능에는 이용료가 없습니다.<br>AI 답변은 PC에서 선택한 서비스의 요금·설정을 따릅니다.<br>이 연결은 HTTP입니다. 신뢰하는 집·사무실 와이파이에서만 사용하세요.<br><a href="/source.zip">이 버전의 소스 코드 · AGPL-3.0</a></footer>
+</main></body></html>

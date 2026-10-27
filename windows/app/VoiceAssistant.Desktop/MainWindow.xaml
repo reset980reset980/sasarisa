@@ -21,6 +21,7 @@
                     <Button x:Name="ChatNav" Style="{StaticResource NavButton}" Click="ChatNav_Click" Background="#2B3A55" Foreground="White"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8F2;" FontFamily="Segoe MDL2 Assets" Margin="0,0,13,0" /><TextBlock Text="대화" /></StackPanel></Button>
                     <Button x:Name="SettingsNav" Style="{StaticResource NavButton}" Click="SettingsNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Margin="0,0,13,0" /><TextBlock Text="설정" /></StackPanel></Button>
                     <Button x:Name="HelpNav" Style="{StaticResource NavButton}" Click="HelpNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE897;" FontFamily="Segoe MDL2 Assets" Margin="0,0,13,0" /><TextBlock Text="사용 방법" /></StackPanel></Button>
+                    <Button Style="{StaticResource NavButton}" Click="Phone_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8EA;" FontFamily="Segoe MDL2 Assets" Margin="0,0,13,0" /><TextBlock Text="휴대폰 연결 · 무료" /></StackPanel></Button>
                 </StackPanel>
                 <StackPanel Grid.Row="3">
                     <Border Background="#223149" CornerRadius="12" Padding="14" Margin="0,0,0,21">
@@ -122,7 +123,7 @@
                                         <TextBlock x:Name="VoiceProviderSummary" Text="Windows 기본 음성" FontWeight="SemiBold" />
                                         <Button Content="음성 제공자 설정" Style="{StaticResource SecondaryButton}" Padding="12,7" HorizontalAlignment="Left" Margin="0,7,0,14" Click="VoiceProviderSettings_Click" />
                                         <Button Content="Pro 계정 연결·사용량" Style="{StaticResource SecondaryButton}" Padding="12,7" HorizontalAlignment="Left" Margin="0,0,0,14" Click="ProAccount_Click" />
-                                        <CheckBox x:Name="ProRemoteInput" Content="휴대폰에서 이 PC에 명령 보내기" Margin="0,0,0,6" />
+                                        <CheckBox x:Name="ProRemoteInput" Content="Pro 서버로 휴대폰 원격 연결 (유료)" Margin="0,0,0,6" />
                                         <TextBlock Text="Pro 계정 연결 후 체크하고 설정을 저장하세요. 휴대폰 명령과 답변은 Sasarisa 서버를 통해 전달됩니다. PC 앱이 실행 중이어야 하며, PC 확인이 필요한 동작은 휴대폰에서 실행하지 않습니다. 처리 중인 원격 요청은 휴대폰에서 ‘중지’를 보내거나 PC의 중지 버튼으로 멈출 수 있습니다." Style="{StaticResource HelpText}" TextWrapping="Wrap" />
                                         <TextBlock x:Name="ProRemoteStatus" Text="휴대폰 원격 꺼짐" Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,6,0,14" AutomationProperties.Name="휴대폰 원격 상태" />
                                         <TextBlock Text="Windows 기본 / 대체 목소리" Style="{StaticResource FieldLabel}" /><ComboBox x:Name="VoiceInput" DisplayMemberPath="Label" SelectedValuePath="Id" />

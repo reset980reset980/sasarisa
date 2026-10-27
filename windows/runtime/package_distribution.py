@@ -24,7 +24,7 @@ def package(stage, root, version, wix):
         paths += list((root / "runtime").glob("*.py")) + list((root / "runtime").glob("*.txt"))
         paths += list((root / "poc").glob("*.py")) + list((root / "poc").glob("*.ps1")) + list((root / "poc").glob("*.txt"))
         paths += list((root / "installer").glob("*.wxs")) + list((root / "installer").glob("*.wixproj"))
-        paths += [p for p in (root / "app").rglob("*") if p.is_file() and not {"bin", "obj"}.intersection(p.relative_to(root).parts) and (p.suffix in {".cs", ".xaml", ".csproj", ".manifest", ".ico"} or p.name.endswith("-LICENSE.txt"))]
+        paths += [p for p in (root / "app").rglob("*") if p.is_file() and not {"bin", "obj"}.intersection(p.relative_to(root).parts) and (p.suffix in {".cs", ".xaml", ".csproj", ".manifest", ".ico", ".html", ".css", ".js"} or p.name.endswith("-LICENSE.txt"))]
         for path in sorted(set(paths)):
             archive.write(path, "windows/" + path.relative_to(root).as_posix())
     (stage / "THIRD-PARTY-NOTICES.md").write_text(
@@ -34,6 +34,7 @@ def package(stage, root, version, wix):
         "Python 3.13.17: https://www.python.org/; license: python/LICENSE.txt.\n"
         ".NET 10 runtime: https://github.com/dotnet/runtime; MIT license.\n"
         "WPF: https://github.com/dotnet/wpf; MIT license.\n"
+        "ASP.NET Core/Kestrel: https://github.com/dotnet/aspnetcore; MIT license and third-party notices under Notices/.\n"
         "WebView2 SDK: https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35.\n"
         "NAudio 3.3.0: https://github.com/naudio/NAudio; MIT license: NAudio-LICENSE.txt.\n"
         "ModelContextProtocol.Core 2.3.0: https://github.com/modelcontextprotocol/csharp-sdk; Apache-2.0 with legacy MIT contributions; see ModelContextProtocol-LICENSE.txt.\n"

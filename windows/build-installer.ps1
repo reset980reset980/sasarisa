@@ -1,4 +1,4 @@
-param([string]$Version = '0.2.24')
+param([string]$Version = '0.2.25')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be major.minor.build' }
 $root = $PSScriptRoot
@@ -34,7 +34,7 @@ Copy-Item -LiteralPath (Join-Path $root 'poc\wake_poc.py') -Destination (Join-Pa
 Copy-Item -LiteralPath (Join-Path $root '..\LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'README.md'),(Join-Path $root 'FEATURE_PARITY.md'),(Join-Path $root 'TOOLS_PARITY.md'),(Join-Path $root 'VERIFICATION.md') -Destination $stage
 New-Item -ItemType Directory -Force (Join-Path $stage 'Notices') | Out-Null
-foreach ($package in @('microsoft.netcore.app.runtime.win-x64\10.0.5','microsoft.windowsdesktop.app.runtime.win-x64\10.0.5','microsoft.web.webview2\1.0.4314.35')) {
+foreach ($package in @('microsoft.netcore.app.runtime.win-x64\10.0.5','microsoft.windowsdesktop.app.runtime.win-x64\10.0.5','microsoft.aspnetcore.app.runtime.win-x64\10.0.5','microsoft.web.webview2\1.0.4314.35')) {
     $packageRoot = Join-Path (Join-Path $env:USERPROFILE '.nuget\packages') $package
     $noticeDir = Join-Path (Join-Path $stage 'Notices') ($package.Replace('\','-'))
     New-Item -ItemType Directory -Force $noticeDir | Out-Null

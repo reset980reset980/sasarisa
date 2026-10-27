@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--phone-only"))
+        {
+            failed = await PhoneChecks.RunAsync(rows);
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "phone-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--grow-only"))
         {
             failed = await GrowChecks.RunAsync(rows, args.Contains("--grow-service"));
@@ -262,6 +268,7 @@ public static class Checks
         failed += await AsideChecks.RunAsync(rows);
         failed += await ProChecks.RunAsync(rows);
         failed += await RemoteChecks.RunAsync(rows);
+        failed += await PhoneChecks.RunAsync(rows);
         failed += await GrowChecks.RunAsync(rows);
         failed += await ApiToolChecks.RunAsync(rows);
         failed += await KakaoChatChecks.RunAsync(rows);

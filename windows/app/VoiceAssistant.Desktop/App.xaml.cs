@@ -44,7 +44,9 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--mcp")) { Shutdown(await McpTools.ServeAsync()); return; }
         if (e.Args.FirstOrDefault() == "--microphone-peer") { Shutdown(await MicrophoneChecks.RunPeerAsync(e.Args)); return; }
         if (e.Args.FirstOrDefault() == "--microphone-status") { Shutdown(await MicrophoneChecks.SnapshotAsync()); return; }
+        if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--phone-app-only")) { Shutdown(await RunPhoneAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--grow-app-only")) { Shutdown(await RunGrowAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test")) { Shutdown(await Checks.RunAsync(e.Args)); return; }
         if (e.Args.Contains("--quit") || e.Args.Contains("--prepare-update"))
@@ -67,6 +69,7 @@ public partial class App : System.Windows.Application
         window.ListenToggled += ToggleListening; window.WakeRequested += Wake; window.StopRequested += StopTurn;
         window.QuitRequested += Quit;
         window.ProAccountChanged += RestartRemote;
+        window.PhoneRequested += ShowPhone;
         window.SettingsSaved += SaveSettings; window.RefreshDevicesRequested += () => _ = RefreshDevices();
         window.SpeakTestRequested += preview => {StopTurn();_ = SayAsync("안녕하세요. Windows 음성 비서가 준비됐어요.", CancellationToken.None, true,preview);};
         window.OverlayPreviewRequested += preferences =>
@@ -540,8 +543,11 @@ public partial class App : System.Windows.Application
         closing = true; StopTurn(); tick?.Stop(); input.Dispose(); output.Dispose();
         window.SetStatus("종료하는 중", "진행 중인 작업을 멈추고 있어요.", false, true); window.IsEnabled = false;
         var stopGrow = StopGrowAsync();
+        var stopPhone = StopPhoneAsync();
         await StopRemoteAsync();
         await stopGrow;
+        await stopPhone;
+        phoneWindow?.Close();
         if (!await brain.WaitForAsideStopAsync()) AppPaths.Log("aside-stop", "앱 종료 제한 시간 안에 Aside 작업 중지를 확인하지 못했어요.");
         videoWindow?.Close(); tray?.Dispose(); Native.UnregisterHotKey(handle, 1); Native.UnregisterHotKey(handle, 2); overlay.Close(); window.Close(); Shutdown();
     }

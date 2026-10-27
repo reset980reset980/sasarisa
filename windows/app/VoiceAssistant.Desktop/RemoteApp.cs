@@ -74,16 +74,16 @@ public partial class App
         }
         finally { if (ReferenceEquals(remoteStop, own)) remoteStop = null; }
     }
-    async Task<string> RunRemoteCommandAsync(RemoteCommand command, CancellationToken token)
+    async Task<string> RunRemoteCommandAsync(RemoteCommand command, CancellationToken token, bool localPhone = false)
     {
         token.ThrowIfCancellationRequested();
-        if (closing || !settings.ProRemote) return "이 PC의 휴대폰 원격 연결이 꺼져 있어요.";
+        if (closing || (localPhone ? phoneServer == null : !settings.ProRemote)) return "이 PC의 휴대폰 원격 연결이 꺼져 있어요.";
         if (busy || speaking || starting || dictating || holding || (listening && awakeUntil > DateTimeOffset.Now) || personalEditorOpen || setupWindow != null || !window.IsEnabled)
             return "PC에서 다른 작업을 처리 중이에요. 끝난 뒤 다시 요청해 주세요.";
         var text = LearnedNames.Strip(command.Text, settings);
         if (string.IsNullOrWhiteSpace(text)) return "호출 이름 뒤에 실행할 내용을 함께 보내 주세요.";
         var context = new RemoteExecution(token);
-        window.SetRemoteStatus("휴대폰 요청을 처리 중이에요.");
+        if (!localPhone) window.SetRemoteStatus("휴대폰 요청을 처리 중이에요.");
         return await context.RunAsync(() => SubmitAsync(text, false));
     }
     async Task StopRemoteAsync()
