@@ -25,6 +25,7 @@ public sealed record UiSettings
     public bool Speak { get; set; } = true;
     public bool ProRemote { get; set; }
     public string GrowTogether { get; set; } = "off";
+    public string YouTubePlayer { get; set; } = "embedded";
     public bool PauseInCalls { get; set; } = true;
     public string BargeIn { get; set; } = "auto";
     public string VoiceId { get; set; } = "";
@@ -184,6 +185,7 @@ public partial class MainWindow : Window
         SpeakInput.IsChecked = settings.Speak;
         ProRemoteInput.IsChecked = settings.ProRemote;
         SelectTag(GrowTogetherInput, settings.GrowTogether);
+        SelectTag(YouTubePlayerInput, settings.YouTubePlayer);
         PauseInCallsInput.IsChecked = settings.PauseInCalls;
         SelectTag(BargeInInput, settings.BargeIn);
         SetSpeechOptions(VoiceInput, SpeechOutput.Options(false), settings.VoiceId);
@@ -380,6 +382,7 @@ public partial class MainWindow : Window
             Speak = SpeakInput.IsChecked == true,
             ProRemote = ProRemoteInput.IsChecked == true,
             GrowTogether = SelectedTag(GrowTogetherInput),
+            YouTubePlayer = SelectedTag(YouTubePlayerInput),
             PauseInCalls = PauseInCallsInput.IsChecked == true,
             BargeIn = (BargeInInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "auto",
             VoiceId=speech.VoiceId, OutputId=speech.OutputId, SpeechRate=speech.SpeechRate, SpeechVolume=speech.SpeechVolume,Tts=speech.Tts,

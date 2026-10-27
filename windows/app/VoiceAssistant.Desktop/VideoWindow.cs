@@ -21,19 +21,30 @@ public sealed class VideoWindow : Window
     public string CurrentUrl { get; private set; } = "";
     public bool IsClosed => closed;
 
-    public VideoWindow()
+    public VideoWindow(Func<string, YouTubeVideo, Task>? useBrowser = null)
     {
         Title = "자비스 · 영상"; Width = 1040; Height = 760; MinWidth = 640; MinHeight = 480;
-        var layout = new DockPanel(); var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8) };
+        var layout = new DockPanel(); var bar = new WrapPanel { Margin = new Thickness(8) };
         void Button(string label, Func<Task> action)
         {
             var button = new Button { Content = label, Margin = new Thickness(4), Padding = new Thickness(12, 7, 12, 7) };
-            button.Click += async (_, _) => { try { await action(); } catch (Exception ex) { status.Text = ex.Message; } }; bar.Children.Add(button);
+            button.Click += async (_, _) => { bar.IsEnabled = false; try { await action(); } catch (Exception ex) { status.Text = ex.Message; } finally { bar.IsEnabled = true; } }; bar.Children.Add(button);
         }
         Button("재생 / 일시정지", async () => status.Text = await ControlAsync("playpause", 0, CancellationToken.None));
         Button("10초 뒤로", async () => status.Text = await ControlAsync("seek", -10, CancellationToken.None));
         Button("10초 앞으로", async () => status.Text = await ControlAsync("seek", 10, CancellationToken.None));
         Button("브라우저에서 열기", async () => { await ControlAsync("pause", 0, CancellationToken.None); WindowsActions.OpenUrl(CurrentUrl); });
+        if (useBrowser != null)
+        {
+            async Task Switch(string browser)
+            {
+                if (!BrowserVideo.IsWatchUrl(CurrentUrl)) throw new InvalidOperationException("영상을 연 뒤 다시 선택하세요.");
+                var id = System.Text.RegularExpressions.Regex.Match(new Uri(CurrentUrl).Query, @"(?:^\?|&)v=([A-Za-z0-9_-]{11})(?:&|$)").Groups[1].Value;
+                await useBrowser(browser, new YouTubeVideo(id, Title));
+            }
+            Button("프리미엄 · Chrome으로 전환", () => Switch("chrome"));
+            Button("프리미엄 · Edge로 전환", () => Switch("edge"));
+        }
         Button("영상 닫기", () => { Close(); return Task.CompletedTask; });
         DockPanel.SetDock(bar, Dock.Top); layout.Children.Add(bar);
         DockPanel.SetDock(status, Dock.Bottom); layout.Children.Add(status); layout.Children.Add(web); Content = layout;

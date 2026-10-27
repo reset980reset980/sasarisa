@@ -21,10 +21,10 @@ public sealed record OwnedWindow(IntPtr Handle, int ProcessId, long ProcessStart
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumCallback callback, IntPtr parameter);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll", SetLastError = true)] static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-    public static HashSet<IntPtr> VisibleWindows()
+    public static HashSet<IntPtr> VisibleWindows(bool includeHidden = false)
     {
         var result = new HashSet<IntPtr>();
-        EnumWindows((h, _) => { if (IsWindowVisible(h)) result.Add(h); return true; }, IntPtr.Zero);
+        EnumWindows((h, _) => { if (includeHidden || IsWindowVisible(h)) result.Add(h); return true; }, IntPtr.Zero);
         return result;
     }
     public static async Task<OwnedWindow?> FindNewAsync(HashSet<IntPtr> before, Process? launched, string label)

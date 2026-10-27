@@ -53,12 +53,13 @@ public static class SettingsStore
         if (s.Activation is not ("voice" or "hotkey" or "hold")) throw new ArgumentException("호출 방식을 확인하세요.");
         if (s.BargeIn is not ("auto" or "any" or "wake" or "off")) throw new ArgumentException("답변 중 끼어들기 방식을 확인하세요.");
         if (s.GrowTogether is not ("off" or "solo" or "together")) throw new ArgumentException("공유 학습 방식을 확인하세요.");
+        if (s.YouTubePlayer is not ("embedded" or "chrome" or "edge")) throw new ArgumentException("유튜브 재생 방식을 확인하세요.");
         if(s.SpeechRate< -5||s.SpeechRate>5||s.SpeechVolume<0||s.SpeechVolume>100)throw new ArgumentException("답변 속도는 -5~5, 음량은 0~100으로 입력하세요.");
         if (s.SilenceSeconds < 0.4 || s.SilenceSeconds > 3 || !double.IsFinite(s.SilenceSeconds)) throw new ArgumentException("말 끝 대기는 0.4~3초입니다.");
         if (s.FollowUpSeconds < 5 || s.FollowUpSeconds > 120 || !double.IsFinite(s.FollowUpSeconds)) throw new ArgumentException("대화 유지 시간은 5~120초입니다.");
         if (s.Threads < 1 || s.Threads > 8) throw new ArgumentException("처리 스레드는 1~8개입니다.");
         if (s.KeywordThreshold < 0.01 || s.KeywordThreshold > 0.9 || !double.IsFinite(s.KeywordThreshold)) throw new ArgumentException("이름 감지 임계값은 0.01~0.9입니다.");
-        if (s.BrainProvider is not ("claude" or "codex" or "ollama" or "aside") && ApiProviders.Find(s.BrainProvider) == null) throw new ArgumentException("AI 종류를 확인하세요.");
+        if (s.BrainProvider is not ("claude" or "codex" or "ollama" or "aside" or "combo") && ApiProviders.Find(s.BrainProvider) == null) throw new ArgumentException("AI 종류를 확인하세요.");
         if (s.BrainProvider == "ollama") ValidateLocalUrl(s.BrainUrl);
         if (ApiProviders.Find(s.BrainProvider) != null) ApiProviders.Endpoint(s.BrainProvider, s.BrainUrl);
         if (s.ProviderProfiles == null) s.ProviderProfiles = new();

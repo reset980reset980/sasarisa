@@ -19,6 +19,7 @@ public static class SetupReadiness
     public static bool HasSpeechEnvironment => File.Exists(AppPaths.Python) && File.Exists(AppPaths.Worker) && HasModel(AppPaths.Model);
     public static string BrainStatus(UiSettings settings)
     {
+        if (settings.BrainProvider == "combo") return ComboBrain.Status();
         if (settings.BrainProvider == "claude") return Brain.ClaudeBinary() != null ? "Claude Code 설치됨 · 로그인과 응답은 대화로 확인하세요." : "Claude Code 설치 필요 · 다른 제공자를 선택할 수도 있어요.";
         if (settings.BrainProvider == "codex") return Brain.CodexBinary() != null ? "Codex 설치됨 · 로그인과 응답은 대화로 확인하세요." : "Codex 설치 필요 · 다른 제공자를 선택할 수도 있어요.";
         if (settings.BrainProvider == "ollama") return "Ollama 서버와 설치한 모델이 필요해요. 설정에서 주소와 모델을 확인하세요.";
@@ -62,7 +63,7 @@ public sealed class SetupWindow : Window
         var content = new Grid(); content.Children.Add(first); content.Children.Add(second); root.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0,0,10,0) });
         AddField(first, "비서를 부를 이름", name); name.Text = settings.Name;
         AddField(first, "비서가 나를 부를 호칭 (선택)", userName); userName.Text = settings.Desktop.UserName;
-        var providers = new List<DeviceOption> { new("claude", "Claude Code · 이 PC의 로그인"), new("codex", "Codex · 이 PC의 로그인"), new("aside", "Aside · 브라우저 작업"), new("ollama", "Ollama · 로컬 모델") };
+        var providers = new List<DeviceOption> { new("claude", "Claude Code · 이 PC의 로그인"), new("codex", "Codex · 이 PC의 로그인"), new("aside", "Aside · 브라우저 작업"), new("combo", "조합 · Codex·Claude·Aside 자동 선택"), new("ollama", "Ollama · 로컬 모델") };
         providers.AddRange(ApiProviders.All.Select(x => new DeviceOption(x.Id, x.Name))); brain.ItemsSource = providers; brain.SelectedValue = settings.BrainProvider;
         AddField(first, "생각하고 답할 AI", brain); first.Children.Add(Help("API 제공자의 키·모델과 로컬 서버 주소는 시작 후 설정에서 연결할 수 있어요."));
         voice.ItemsSource = SpeechOutput.Options(false); voice.SelectedValue = settings.VoiceId;

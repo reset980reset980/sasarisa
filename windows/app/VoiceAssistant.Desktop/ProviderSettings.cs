@@ -40,9 +40,24 @@ public partial class MainWindow
         OllamaFields.Visibility = id == "ollama" || provider?.EditableUrl == true ? Visibility.Visible : Visibility.Collapsed;
         ApiFields.Visibility = provider != null ? Visibility.Visible : Visibility.Collapsed;
         AsideFields.Visibility = id == "aside" ? Visibility.Visible : Visibility.Collapsed;
-        ModelHelp.Text = provider != null ? "함수 호출을 지원하는 모델을 선택하세요. 화면 이미지 작업에는 이미지 입력도 지원해야 합니다." :
+        ComboFields.Visibility = id == "combo" ? Visibility.Visible : Visibility.Collapsed;
+        ModelInput.IsEnabled = id != "combo";
+        if (id == "combo") ComboStatus.Text = ComboBrain.Status();
+        ModelHelp.Text = id == "combo" ? "각 AI를 개별 선택해 지정한 모델을 사용합니다. 모델을 바꾸려면 해당 AI를 선택해 입력한 뒤 조합으로 돌아와 설정을 저장하세요. 지정하지 않으면 각 도구의 기본 모델을 사용합니다." : provider != null ? "함수 호출을 지원하는 모델을 선택하세요. 화면 이미지 작업에는 이미지 입력도 지원해야 합니다." :
             id == "ollama" ? "함수 호출 지원 모델을 선택하세요. 이미지 작업에는 이미지 입력도 필요합니다. 비우면 첫 설치 모델을 사용합니다." : id == "aside" ? "비우면 Aside의 기본 모델을 사용합니다. 모델을 지정하려면 Aside에 설정된 provider/model 이름을 넣으세요." : "비워두면 이 PC의 로그인 계정에 설정된 기본 모델을 사용합니다.";
         if (provider != null) UpdateKeyStatus();
+    }
+    void RefreshCombo_Click(object sender, RoutedEventArgs e) => ComboStatus.Text = ComboBrain.Status();
+    void YouTubeLogin_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var browser = SelectedTag(YouTubePlayerInput);
+            if (browser == "embedded") { YouTubeFeedback.Text = "먼저 Chrome 또는 Edge를 선택하세요. 내부 재생기는 브라우저의 로그인 상태를 공유하지 않습니다."; return; }
+            VideoBrowserLaunch.Login(browser);
+            YouTubeFeedback.Text = "브라우저에서 프리미엄 계정으로 로그인해 주세요. 이 재생 방식을 적용하려면 설정을 저장하세요.";
+        }
+        catch (Exception ex) { YouTubeFeedback.Text = ex.Message; }
     }
     void BrainUrlInput_TextChanged(object sender, TextChangedEventArgs e)
     {

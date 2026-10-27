@@ -26,6 +26,7 @@ public partial class App : System.Windows.Application
     readonly SemaphoreSlim executionGate = new(1, 1);
     readonly List<OwnedWindow> ownedWindows = new();
     VideoWindow? videoWindow;
+    BrowserVideo? browserVideo;
     int videoRequest;
     bool holding, personalEditorOpen;
     HotkeyManager? hotkeys;
@@ -47,6 +48,7 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
         if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--combo-app-only")) { Shutdown(await RunComboAppChecksAsync(e.Args.Contains("--combo-native"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--remote-app-only")) { Shutdown(await RunRemoteAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--phone-app-only")) { Shutdown(await RunPhoneAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--grow-app-only")) { Shutdown(await RunGrowAppChecksAsync()); return; }
@@ -434,10 +436,14 @@ public partial class App : System.Windows.Application
                 actionHistory.Record("앱 열기 · " + label, owned == null ? null : owned.CloseAsync, "새로 연 창을 특정하지 못했어요. 기존 창을 닫지 않도록 직접 닫아 주세요."); break;
             case "open_url": WindowsActions.OpenUrl(action.Value); webSearch.Opened(action.Value); break;
             case "youtube_search":case "youtube_play":return await SearchYouTubeAsync(action,token);
-            case "youtube_select":var video=youtube.Select(action.Number);await PlayVideoAsync(video,token);return $"{action.Number}번째 영상 ‘{video.Title}’의 재생을 요청했어요.";
+            case "youtube_select":var video=youtube.Select(action.Number);return await PlayVideoAsync(video,token);
             case "youtube_list":return YouTubeList();
-            case "youtube_close":videoWindow?.Close();videoWindow=null;return "비서의 영상 창을 닫았어요.";
-            case "seek":return videoWindow is {IsClosed:false}?await videoWindow.ControlAsync("seek",action.Number,token):"먼저 비서에게 유튜브 영상을 틀어 달라고 말해 주세요.";
+            case "youtube_close":
+                if (browserVideo is { Opened: true }) return await browserVideo.ControlAsync("close", 0, token);
+                videoWindow?.Close();videoWindow=null;return "비서의 영상 창을 닫았어요.";
+            case "seek":
+                if (browserVideo is { Opened: true }) return await browserVideo.ControlAsync("seek", action.Number, token);
+                return videoWindow is {IsClosed:false}?await videoWindow.ControlAsync("seek",action.Number,token):"먼저 비서에게 유튜브 영상을 틀어 달라고 말해 주세요.";
             case "dictation_once": return await ApplyDictationAsync(action.Value, token, expected);
             case "type": await hands.TypeAsync(action.Value, token, expected); break;
             case "key": await hands.KeyAsync(action.Value, token, expected, [hotkeys?.Wake, hotkeys?.Stop], keyFocus); break;
@@ -446,6 +452,7 @@ public partial class App : System.Windows.Application
             case "browser_tabs": case "browser_select": case "browser_close": case "browser_select_nth": case "browser_close_nth": case "browser_close_site": case "mail_select":
                 return (await RunBrowserActionAsync(action, token, expected)).Summary;
             case "media":
+                if(action.Value!="mute" && browserVideo is { Opened: true }) return await browserVideo.ControlAsync(action.Value,0,token);
                 if(action.Value!="mute" && videoWindow is {IsClosed:false})return await videoWindow.ControlAsync(action.Value,0,token);
                 WindowsActions.Media(action.Value); break;
             case "display_off":
@@ -480,9 +487,36 @@ public partial class App : System.Windows.Application
         scene.DismissRequested += StopTurn; scene.Closed += (_, _) => { if (ReferenceEquals(scene, greetingWindow)) greetingWindow = null; };
         scene.Show();
     }
-    async Task PlayVideoAsync(YouTubeVideo video,CancellationToken token)
+    async Task UseVideoBrowserAsync(string browser, YouTubeVideo video)
     {
-        if(videoWindow==null||videoWindow.IsClosed)videoWindow=new VideoWindow();
+        if (!await executionGate.WaitAsync(0)) throw new InvalidOperationException("진행 중인 명령이 끝난 뒤 다시 전환해 주세요.");
+        try
+        {
+        var next = settings with { YouTubePlayer = browser };
+        var error = SaveSettings(next); if (error != null) throw new InvalidOperationException(error);
+        window.LoadSettings(settings);
+        window.AddMessage("system", "앞으로 유튜브는 " + (browser == "chrome" ? "Chrome" : "Edge") + "에서 재생합니다. 프리미엄 계정 로그인은 브라우저에서 확인하세요.");
+        window.AddMessage("assistant", await PlayVideoAsync(video, CancellationToken.None));
+        }
+        finally { executionGate.Release(); }
+    }
+    async Task<string> PlayVideoAsync(YouTubeVideo video,CancellationToken token)
+    {
+        if (settings.YouTubePlayer != "embedded")
+        {
+            if (videoWindow is { IsClosed: false }) { await videoWindow.ControlAsync("pause", 0, token); videoWindow.Close(); videoWindow = null; }
+            browserVideo ??= new BrowserVideo(hands.VideoDriver()); var browserRequest = ++videoRequest;
+            var notice = await browserVideo.OpenAsync(settings.YouTubePlayer, video, token);
+            if (browserVideo.Active) actionHistory.Record("브라우저 영상 · " + video.Title, cancellation =>
+            {
+                if (browserRequest != videoRequest) throw new InvalidOperationException("다른 영상이 재생 중이어서 닫지 않았어요.");
+                return browserVideo.ControlAsync("close", 0, cancellation);
+            });
+            return notice;
+        }
+        if (browserVideo is { Active: true }) await browserVideo.ControlAsync("close", 0, token);
+        browserVideo?.Forget();
+        if(videoWindow==null||videoWindow.IsClosed)videoWindow=new VideoWindow(UseVideoBrowserAsync);
         var own=videoWindow;var request=++videoRequest;
         try
         {
@@ -495,6 +529,7 @@ public partial class App : System.Windows.Application
             });
         }
         catch{if(request==videoRequest&&ReferenceEquals(own,videoWindow)){own.Close();videoWindow=null;}throw;}
+        return "영상 ‘" + video.Title + "’의 재생을 요청했어요.";
     }
     async Task<string> SearchYouTubeAsync(AssistantAction action,CancellationToken token)
     {
@@ -506,7 +541,7 @@ public partial class App : System.Windows.Application
         if(found.Count==0){WindowsActions.OpenUrl(YouTubeSearch.SearchUrl(action.Value));return "영상 목록을 읽지 못해 검색 페이지를 열었어요.";}
         window.AddMessage("system",YouTubeList());
         if(action.Kind=="youtube_search"){WindowsActions.OpenUrl(YouTubeSearch.SearchUrl(action.Value));return "검색 결과를 열었어요. ‘두 번째 영상 틀어’처럼 골라 주세요.";}
-        await PlayVideoAsync(found[0],token);return $"첫 번째 영상 ‘{found[0].Title}’의 재생을 요청했어요. ‘두 번째 영상 틀어’처럼 다른 결과를 고를 수도 있어요.";
+        var playback = await PlayVideoAsync(found[0],token);return playback + " ‘두 번째 영상 틀어’처럼 다른 결과를 고를 수도 있어요.";
     }
     async Task SayAsync(string text, CancellationToken token, bool force = false,UiSettings? preview=null)
     {

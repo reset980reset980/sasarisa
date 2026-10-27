@@ -13,6 +13,18 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--video-browser-only"))
+        {
+            failed = await BrowserVideoChecks.RunAsync(rows, args.Contains("--video-browser-native"));
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "video-browser-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
+        if (args.Contains("--combo-only"))
+        {
+            failed = ComboChecks.Run(rows);
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "combo-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--phone-only"))
         {
             failed = await PhoneChecks.RunAsync(rows);
@@ -266,6 +278,8 @@ public static class Checks
         Check("Codex JSON event response",()=>{var body=JsonSerializer.Serialize(new{reply="완료",actions=Array.Empty<AssistantAction>()});var events=JsonSerializer.Serialize(new{type="item.completed",item=new{type="agent_message",text=body}})+"\n{\"type\":\"turn.completed\"}";Equal(Brain.DecodeCodexEvents(events).Reply,"완료");});
         failed += await ApiChecks.RunAsync(rows);
         failed += await AsideChecks.RunAsync(rows);
+        failed += ComboChecks.Run(rows);
+        failed += await BrowserVideoChecks.RunAsync(rows);
         failed += await ProChecks.RunAsync(rows);
         failed += await RemoteChecks.RunAsync(rows);
         failed += await PhoneChecks.RunAsync(rows);

@@ -11,7 +11,13 @@ public partial class App
 {
     async Task<AgentRunResult> RunAiAsync(string text, string screen, CancellationToken token)
     {
-        var requestSettings = settings;
+        var selection = ComboBrain.Resolve(settings, text);
+        var requestSettings = selection.Settings;
+        if (settings.BrainProvider == "combo")
+        {
+            window.AddMessage("system", selection.Description);
+            AppPaths.Log("combo", selection.Provider);
+        }
         if (requestSettings.BrainProvider == "aside")
         {
             if (RemoteExecution.Current != null) throw new AgentStoppedException("Aside 웹 작업은 현재 PC에서 요청해야 해요. 휴대폰 원격 연결은 아직 지원하지 않습니다.");

@@ -25,8 +25,8 @@ public sealed partial class Brain
         required = new[] { "reply", "actions" },
         additionalProperties = false
     });
-    public static string NameFor(string provider)=>ApiProviders.Find(provider)?.Name ?? (provider switch{"codex"=>"Codex","ollama"=>"로컬 Ollama","aside"=>"Aside",_=>"Claude Code"});
-    public static string StatusFor(string provider)=>provider switch{"codex"=>CodexBinary()!=null?"Codex 연결 준비됨":"Codex 설치 필요","claude"=>ClaudeBinary()!=null?"Claude Code 연결 준비됨":"Claude Code 설치 필요","aside"=>AsideClient.Binary()!=null?"Aside CLI 설치됨 · 설정에서 연결 확인":"Aside CLI 설치 필요",_=>NameFor(provider)};
+    public static string NameFor(string provider)=>ApiProviders.Find(provider)?.Name ?? (provider switch{"codex"=>"Codex","ollama"=>"로컬 Ollama","aside"=>"Aside","combo"=>"조합",_=>"Claude Code"});
+    public static string StatusFor(string provider)=>provider switch{"combo"=>ComboBrain.Status(),"codex"=>CodexBinary()!=null?"Codex 연결 준비됨":"Codex 설치 필요","claude"=>ClaudeBinary()!=null?"Claude Code 연결 준비됨":"Claude Code 설치 필요","aside"=>AsideClient.Binary()!=null?"Aside CLI 설치됨 · 설정에서 연결 확인":"Aside CLI 설치 필요",_=>NameFor(provider)};
     public static string? ClaudeBinary()
     {
         var native = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin", "claude.exe");
@@ -35,6 +35,7 @@ public sealed partial class Brain
     }
     internal async Task<CommandPlan> AskAsync(string text, string screen, UiSettings settings, CancellationToken token, string memory = "", IReadOnlyList<ActionObservation>? observations = null, McpEndpoint? mcp = null, Func<AssistantAction, CancellationToken, Task<McpReply>>? directTools = null)
     {
+        settings = ComboBrain.Resolve(settings, text).Settings;
         if (settings.BrainProvider == "aside") return new(await AskAsideAsync(text, memory + "\n" + screen, settings, token), Array.Empty<AssistantAction>());
         var prompt = $"너는 Windows 음성 비서 {settings.Name}다. 한국어로 짧고 자연스럽게 답한다. 현재 시각 {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}.\n" +
             "브라우저 도구: browser_tabs(value 빈 문자열: 앞 창, all: 모든 창; number 0/1 첫 페이지, 2 이상 다음 페이지)은 실제 탭 ID·주소·제목 목록을 6개씩 돌려준다. 전체 개수와 페이지 수를 확인하고 필요하면 같은 value와 다음 number로 더 조회한다. browser_select(value 목록에서 확인한 id)는 그 탭 선택, browser_close(value 목록 id)는 그 탭 닫기, browser_close_site(value 정확한 도메인 예 naver.com)는 앞 창의 해당 사이트 탭을 닫고 앞 창에 없으면 다른 창에서 찾는다. 탭 ID를 지어내지 않는다. mail_select(number 1~100)는 현재 네이버 메일 목록의 N번째 메일 열기이며 메일 전송은 하지 않는다. 브라우저 창이나 탭이 바뀌면 작업이 중단된다.\n" +

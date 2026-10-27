@@ -39,7 +39,7 @@ public static class SettingsTransfer
         CheckUrl(settings.Tts.Url);
         foreach (var profile in settings.ProviderProfiles)
         {
-            if (profile.Key is not ("claude" or "codex" or "ollama") && ApiProviders.Find(profile.Key) == null) throw new ArgumentException("지원하지 않는 AI 연결 설정이 있어요.");
+            if (profile.Key is not ("claude" or "codex" or "ollama" or "aside" or "combo") && ApiProviders.Find(profile.Key) == null) throw new ArgumentException("지원하지 않는 AI 연결 설정이 있어요.");
             if (profile.Value.Model.Length > 300) throw new ArgumentException("AI 모델 이름이 너무 길어요.");
             CheckUrl(profile.Value.Url);
             if (profile.Key == "ollama" && profile.Value.Url.Length > 0) SettingsStore.ValidateLocalUrl(profile.Value.Url);
@@ -104,6 +104,7 @@ public static class SettingsTransfer
         Item("처리 스레드", before.Threads, after.Threads); Item("빠른 호출어 감지", before.Kws, after.Kws); Item("호출어 감지 기준", before.KeywordThreshold, after.KeywordThreshold);
         Item("다른 앱 마이크 사용 시 자동 대기", before.PauseInCalls, after.PauseInCalls);
         Item("답변 중 끼어들기", before.BargeIn, after.BargeIn);
+        Item("유튜브 재생 방식", before.YouTubePlayer, after.YouTubePlayer);
         Item("답변 읽기", before.Speak, after.Speak); Item("목소리", before.VoiceId, after.VoiceId); Item("출력 장치", before.OutputId, after.OutputId); Item("읽기 속도", before.SpeechRate, after.SpeechRate); Item("답변 음량", before.SpeechVolume, after.SpeechVolume);
         Item("음성 제공자", ExternalVoice.Name(before.Tts.Provider), ExternalVoice.Name(after.Tts.Provider)); Item("외부 목소리", before.Tts.Voice, after.Tts.Voice); Item("음성 모델", before.Tts.Model, after.Tts.Model); Item("음성 지역", before.Tts.Region, after.Tts.Region); Item("음성 서버", before.Tts.Url, after.Tts.Url); Item("외부 읽기 속도", before.Tts.Speed, after.Tts.Speed); Item("음성 실패 시 기본 목소리", before.Tts.Fallback, after.Tts.Fallback);
         Item("AI 제공자", Brain.NameFor(before.BrainProvider), Brain.NameFor(after.BrainProvider)); Item("AI 모델", before.BrainModel, after.BrainModel); Item("AI 서버 주소", before.BrainUrl, after.BrainUrl); Item("Whisper 서버", before.WhisperUrl, after.WhisperUrl); Item("코딩 프로젝트 폴더", before.ProjectDirectory, after.ProjectDirectory);
