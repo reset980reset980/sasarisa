@@ -266,7 +266,16 @@
                                         <StackPanel><TextBlock Text="호출어 감지 기준" Style="{StaticResource FieldLabel}" /><TextBox x:Name="ThresholdInput" Text="0.15" Style="{StaticResource Field}" /><TextBlock Text="낮을수록 민감하게 감지합니다 · 0.01–0.9" Style="{StaticResource HelpText}" /></StackPanel>
                                         <StackPanel Grid.Column="2"><TextBlock Text="인식 처리 스레드" Style="{StaticResource FieldLabel}" /><TextBox x:Name="ThreadsInput" Text="2" Style="{StaticResource Field}" /><TextBlock Text="CPU 사용량과 속도 조절 · 1–8" Style="{StaticResource HelpText}" /></StackPanel>
                                     </Grid>
-                                    <TextBlock Text="Whisper 로컬 서버 주소 (선택)" Style="{StaticResource FieldLabel}" Margin="0,18,0,7" /><TextBox x:Name="WhisperUrlInput" Style="{StaticResource Field}" /><TextBlock Text="정밀 받아쓰기용 서버 주소. 비워두면 기본 인식 결과를 사용합니다." Style="{StaticResource HelpText}" />
+                                    <TextBlock Text="로컬 음성 보정" Style="{StaticResource FieldLabel}" Margin="0,18,0,7" />
+                                    <ComboBox x:Name="WhisperModeInput">
+                                        <ComboBoxItem Content="사용 안 함" Tag="off" />
+                                        <ComboBoxItem Content="이 PC · NVIDIA 가속" Tag="cuda" />
+                                        <ComboBoxItem Content="이 PC · CPU" Tag="cpu" />
+                                        <ComboBoxItem Content="직접 실행한 로컬 서버" Tag="external" />
+                                    </ComboBox>
+                                    <Button Content="보정 엔진 준비" Click="PrepareWhisper_Click" HorizontalAlignment="Left" Margin="0,8,0,8" Padding="12,7" />
+                                    <TextBlock Text="NVIDIA·CPU 방식은 엔진을 한 번 설치하면 자비스가 자동 실행합니다. 짧고 확실한 명령은 바로 실행하며, 보정 실패 시 기본 인식으로 계속합니다." Style="{StaticResource HelpText}" />
+                                    <TextBlock Text="직접 실행한 서버 주소 (선택)" Style="{StaticResource FieldLabel}" Margin="0,12,0,7" /><TextBox x:Name="WhisperUrlInput" Style="{StaticResource Field}" /><TextBlock Text="‘직접 실행한 로컬 서버’에서만 사용합니다. 주소가 비어 있으면 보정하지 않습니다." Style="{StaticResource HelpText}" />
                                 </StackPanel>
                             </Expander>
                             </StackPanel>

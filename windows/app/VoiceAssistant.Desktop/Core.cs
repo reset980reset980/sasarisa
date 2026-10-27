@@ -67,6 +67,7 @@ public static class SettingsStore
         s.Text ??= new(); s.Text.Validate();
         s.Tts ??= new(); s.Tts.Validate();
         if (!string.IsNullOrWhiteSpace(s.WhisperUrl)) ValidateLocalUrl(s.WhisperUrl);
+        if (s.WhisperMode is not ("off" or "external" or "cpu" or "cuda")) throw new ArgumentException("음성 보정 방식을 확인하세요.");
     }
     public static Uri ValidateLocalUrl(string url)
     {
@@ -134,7 +135,7 @@ public static class CommandParser
         if (Regex.IsMatch(compact, @"^(?:화면|모니터|디스플레이)(?:을|를)?(?:꺼(?:줘|주세요)?|끄기|끄세요|끄자)$") ||
             Regex.IsMatch(s, @"^(?:turn off (?:the )?(?:screen|display|monitor)|(?:screen|display|monitor) off)$", RegexOptions.IgnoreCase))
             return One("화면 끄기를 요청했어요.", "display_off");
-        if (compact is "몇시야" or "지금몇시야" or "시간알려줘" or "현재시간") return One(DateTime.Now.ToString("지금은 tt h시 m분이에요.", CultureInfo.GetCultureInfo("ko-KR")), "answer");
+        if (compact is "몇시야" or "지금몇시야" or "시간알려줘" or "현재시간" || Regex.IsMatch(compact, @"^(?:지금)?몇시(?:냐|니|예요|에요|인가요|입니까)$")) return One(DateTime.Now.ToString("지금은 tt h시 m분이에요.", CultureInfo.GetCultureInfo("ko-KR")), "answer");
         if (compact is "오늘며칠이야" or "오늘날짜" or "날짜알려줘") return One(DateTime.Now.ToString("오늘은 M월 d일 dddd이에요.", CultureInfo.GetCultureInfo("ko-KR")), "answer");
         if (compact is "받아써" or "받아쓰기" or "받아쓰기시작") return One("받아쓰기를 시작했어요. 입력할 창을 선택한 뒤 말하세요. 끝내려면 ‘그만’이라고 하세요.", "dictation");
         var dictated = Regex.Match(input.Trim(), @"^받아적어\s+([\s\S]+)$");

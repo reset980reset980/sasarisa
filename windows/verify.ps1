@@ -24,3 +24,5 @@ if ($LASTEXITCODE -ne 0) { throw 'Acoustic signal checks failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Worker capture and pre-roll checks failed.' }
 & (Join-Path $PSScriptRoot 'poc\.venv\Scripts\python.exe') -B (Join-Path $PSScriptRoot 'runtime\test_names.py')
 if ($LASTEXITCODE -ne 0) { throw 'Learned wake-name checks failed.' }
+& (Join-Path $PSScriptRoot 'poc\.venv\Scripts\python.exe') -B (Join-Path $PSScriptRoot 'runtime\test_whisper_capture.py')
+if ($LASTEXITCODE -ne 0) { throw 'Whisper audio handoff checks failed.' }

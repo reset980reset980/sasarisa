@@ -1,7 +1,7 @@
 """Local speech worker. JSON lines over stdio; never executes recognized text.
 
 The desktop app owns wake/session/action policy. Audio stays in memory; a WAV is
-included only when the user has configured the optional local Whisper server.
+included only when the user enables managed Whisper or a local Whisper server.
 """
 import argparse
 import base64
@@ -189,7 +189,7 @@ class Recognizer:
             command = re.sub(r"^[야아](?=\s|[,.!?~]|$)", "", self.text[match.end():]).strip(" ,.!?~") if match else self.text
             data = dict(text=self.text, command=command, has_wake=self.woken,
                         utterance=self.sequence, duration=round(len(self.audio) * CHUNK / SR, 2))
-            if self.cfg.get("WhisperUrl"):
+            if self.cfg.get("WhisperMode", "external") in ("cpu", "cuda") or (self.cfg.get("WhisperMode", "external") == "external" and self.cfg.get("WhisperUrl")):
                 pcm = np.clip(np.concatenate(self.audio) * 32767, -32768, 32767).astype("<i2")
                 buf = io.BytesIO()
                 with wave.open(buf, "wb") as wav:

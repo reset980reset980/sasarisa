@@ -1,0 +1,201 @@
+﻿{
+    "cpu":  [
+                {
+                    "Name":  "ggml-base.dll",
+                    "Length":  693248,
+                    "Sha256":  "bede0d6b2d387236ecd2b5dd676d51c8984b5b6e0ae461a12174e9c01345c5f0"
+                },
+                {
+                    "Name":  "ggml-cpu-alderlake.dll",
+                    "Length":  1009664,
+                    "Sha256":  "d8f5c56ea490394eeae8b271650f2647aecd039a542d6df9e0140726e62a4603"
+                },
+                {
+                    "Name":  "ggml-cpu-cannonlake.dll",
+                    "Length":  1049600,
+                    "Sha256":  "74127b40abd4f595d9db6af0fa313a02e18ff42fc228bfa05281e7c788dd4507"
+                },
+                {
+                    "Name":  "ggml-cpu-cascadelake.dll",
+                    "Length":  1061376,
+                    "Sha256":  "4b11c427b844eeac87529af9a8d94b35aad2024666beb2a35e59fe3077e4b81e"
+                },
+                {
+                    "Name":  "ggml-cpu-haswell.dll",
+                    "Length":  1010688,
+                    "Sha256":  "1306b1014c8118d27234d8ddc0e66ced1f8c8476bf85071595fd182ea9b7263b"
+                },
+                {
+                    "Name":  "ggml-cpu-icelake.dll",
+                    "Length":  1061376,
+                    "Sha256":  "2b4dc4c66e7d8fe2807283816e9cf3b7f7d0556f59df34069871e37eab8aed40"
+                },
+                {
+                    "Name":  "ggml-cpu-sandybridge.dll",
+                    "Length":  1026560,
+                    "Sha256":  "04edbdebc01a1d421062a960881a4f34d520d99693999518243f332406444c6e"
+                },
+                {
+                    "Name":  "ggml-cpu-skylakex.dll",
+                    "Length":  1049600,
+                    "Sha256":  "1774714cf93621406ff35344b54715619a83242ae3e331e44d98a3b35ce801be"
+                },
+                {
+                    "Name":  "ggml-cpu-sse42.dll",
+                    "Length":  862720,
+                    "Sha256":  "f060318772c4c2dbac312bbfff6ea700b85dbc502bb38585a7186d06d549301a"
+                },
+                {
+                    "Name":  "ggml-cpu-x64.dll",
+                    "Length":  866816,
+                    "Sha256":  "4b4b05caba40d4309b5d710ef74c59ba190516b8489f27bdb1ba11ae33c6e9d3"
+                },
+                {
+                    "Name":  "ggml.dll",
+                    "Length":  62464,
+                    "Sha256":  "31fe18616d872af9b6134b47a6dff8072ae4ecbe5df0273f4f8dc36766c9db8e"
+                },
+                {
+                    "Name":  "llama.dll",
+                    "Length":  2755072,
+                    "Sha256":  "74b7857b05951c0dff4c7baf796205433c84ee40c9bbb0bda3f182d4425ce339"
+                },
+                {
+                    "Name":  "parakeet.dll",
+                    "Length":  582144,
+                    "Sha256":  "abe7399d64a67b1ebcb8d33becd07c67cbf186cb0d2bab34a4264feefdc337c4"
+                },
+                {
+                    "Name":  "SDL2.dll",
+                    "Length":  2500096,
+                    "Sha256":  "de23db1694a3c7a4a735e7ecd3d214b2023cc2267922c6c35d30c7fc7370d677"
+                },
+                {
+                    "Name":  "whisper-server.exe",
+                    "Length":  726016,
+                    "Sha256":  "a97456e747f28e7bb09c1dac35f40d94404c5ecffa74aaaaa7a3753ea6543121"
+                },
+                {
+                    "Name":  "whisper.dll",
+                    "Length":  1370112,
+                    "Sha256":  "034396d75bb5720c1851674ff64a96192b58f6927b68d334ebd254ce6cad9674"
+                }
+            ],
+    "cuda":  [
+                 {
+                     "Name":  "cublas64_12.dll",
+                     "Length":  100033536,
+                     "Sha256":  "e40202fe4223c1cd2d2dce7beec59e1ed61c7801bd827309183be9b50e358f4c"
+                 },
+                 {
+                     "Name":  "cublasLt64_12.dll",
+                     "Length":  473551360,
+                     "Sha256":  "2a896460bef60ed57ef32b0875812f355a6984e671d638bb632f5e8c1d7a831f"
+                 },
+                 {
+                     "Name":  "cudart64_12.dll",
+                     "Length":  553984,
+                     "Sha256":  "d28e42265da7462162a54da6b7a99ea4fa2caf8139d862bb500db875d0b32dfc"
+                 },
+                 {
+                     "Name":  "ggml-base.dll",
+                     "Length":  677376,
+                     "Sha256":  "c1913240deccc0e3129b10c9fa1abca72a3cd26dc613329b90e936eab95e486e"
+                 },
+                 {
+                     "Name":  "ggml-cpu-alderlake.dll",
+                     "Length":  1004544,
+                     "Sha256":  "425d2501d54b143e980f2b36a3457d2da6a7a6087e31c4ed012587fc5614a238"
+                 },
+                 {
+                     "Name":  "ggml-cpu-cannonlake.dll",
+                     "Length":  1047040,
+                     "Sha256":  "883c4cc45121823621ab284d0d5d4749f60aa3961ad30bf5faafaacd07ebd82f"
+                 },
+                 {
+                     "Name":  "ggml-cpu-cascadelake.dll",
+                     "Length":  1045504,
+                     "Sha256":  "5d7873ecee4195b04be94b3844c5463fbaae794207abd4cd5d16538fa8f72d97"
+                 },
+                 {
+                     "Name":  "ggml-cpu-haswell.dll",
+                     "Length":  1005568,
+                     "Sha256":  "51fdc42862b5d928e098ffac393b0bfb26a889ac794e5194bf44eb14d503b9c5"
+                 },
+                 {
+                     "Name":  "ggml-cpu-icelake.dll",
+                     "Length":  1045504,
+                     "Sha256":  "f058b6a05fc5f0db3bbc0f0c699d4d9b1d98e4d7bb4a2b6bdc7cd85171a90b5c"
+                 },
+                 {
+                     "Name":  "ggml-cpu-sandybridge.dll",
+                     "Length":  1001472,
+                     "Sha256":  "33824adeabfaef0c7daea1e7c1dd754488a52a225a4f2386deb5ba9a419c60ce"
+                 },
+                 {
+                     "Name":  "ggml-cpu-skylakex.dll",
+                     "Length":  1047040,
+                     "Sha256":  "2f5e7687e5a014b2b6c5a1eaca243be4ca9d77910f5cb956c20343cdf4749903"
+                 },
+                 {
+                     "Name":  "ggml-cpu-sse42.dll",
+                     "Length":  838656,
+                     "Sha256":  "bffa72877d666493dfbed2e28667c90f06177a537b0d119580bbe55c18e6ea1e"
+                 },
+                 {
+                     "Name":  "ggml-cpu-x64.dll",
+                     "Length":  839168,
+                     "Sha256":  "9ae1c396a439e2d060dc779199434a47944ec08d5f973b98a4babee43499965e"
+                 },
+                 {
+                     "Name":  "ggml-cuda.dll",
+                     "Length":  569981440,
+                     "Sha256":  "e728ca1baad3ce9cee8b1e96fdc4d7e033ba558ef219c7e4594b007e32570ccc"
+                 },
+                 {
+                     "Name":  "ggml.dll",
+                     "Length":  60928,
+                     "Sha256":  "3f1e7f8deb26a37b44280e9b0286e4061b5a582484beb3002e13f8cb7bde219b"
+                 },
+                 {
+                     "Name":  "llama.dll",
+                     "Length":  2755072,
+                     "Sha256":  "728c0669de1a36c20f6da0ca097488fe39625f22050d404359470d352d2046fa"
+                 },
+                 {
+                     "Name":  "nvblas64_12.dll",
+                     "Length":  331776,
+                     "Sha256":  "e42a77405e6e4b1cc661dcfcddead35ec62dcf59c6f9be1a3b5fab73d1f4c616"
+                 },
+                 {
+                     "Name":  "nvrtc-builtins64_124.dll",
+                     "Length":  5367808,
+                     "Sha256":  "79888dba26c51475ea21fc7b47d2b9dd5b1ffaecc8e5ea22a49fa5f5a722eb43"
+                 },
+                 {
+                     "Name":  "nvrtc64_120_0.dll",
+                     "Length":  44738048,
+                     "Sha256":  "3aa3cd8aa10437e212760c0e1ed730807811ec3bc330216dbfde4b26211d2243"
+                 },
+                 {
+                     "Name":  "parakeet.dll",
+                     "Length":  571904,
+                     "Sha256":  "5b541fcfba4004b76218ab1c951ea2cc7ae63b9ae9c8967c6b8ed5e5ad9f959a"
+                 },
+                 {
+                     "Name":  "SDL2.dll",
+                     "Length":  2500096,
+                     "Sha256":  "de23db1694a3c7a4a735e7ecd3d214b2023cc2267922c6c35d30c7fc7370d677"
+                 },
+                 {
+                     "Name":  "whisper-server.exe",
+                     "Length":  728576,
+                     "Sha256":  "77f90f930174702b45e546ffad6b1bbc1226b566775f291237a44e713a80b924"
+                 },
+                 {
+                     "Name":  "whisper.dll",
+                     "Length":  1312256,
+                     "Sha256":  "ef910400009cbb62ae3dbd115a080bfb039f8138eac3785bb657effdfc235dc2"
+                 }
+             ]
+}

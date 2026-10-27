@@ -43,7 +43,7 @@ public sealed class NameTrainingWindow : Window
         panel.Children.Add(Text("부르는 이름을 이 마이크에 맞춰 볼게요", 22));
         panel.Children.Add(Text("이름만 8번, 이름과 짧은 문장 4번을 읽어 주세요. 한 번에 최대 15초입니다. 시험 문장은 실행하지 않습니다. 음성 파일은 저장하지 않으며, 적용하면 이름·선택한 마이크·보정 발음과 시험 글을 저장합니다."));
         panel.Children.Add(Text("마이크: " + device.Label));
-        if (preferences.WhisperUrl.Length > 0) panel.Children.Add(Text("설정된 로컬 Whisper 서버에서도 시험 발음을 확인합니다."));
+        if (WhisperEngine.Enabled(preferences)) panel.Children.Add(Text("설정된 로컬 Whisper 엔진에서도 시험 발음을 확인합니다."));
         panel.Children.Add(prompt); panel.Children.Add(meter); panel.Children.Add(status); panel.Children.Add(heard);
         var controls = new WrapPanel(); controls.Children.Add(start); controls.Children.Add(finish); controls.Children.Add(retry); panel.Children.Add(controls);
         panel.Children.Add(samples); panel.Children.Add(result);
@@ -163,10 +163,10 @@ public sealed class NameTrainingWindow : Window
         refining = true; RefreshButtons(); var refined = ""; var notice = "";
         try
         {
-            if (finalWav.Length > 0 && preferences.WhisperUrl.Length > 0)
+            if (finalWav.Length > 0 && WhisperEngine.Enabled(preferences))
             {
                 status.Text = "설정된 로컬 서버에서 발음을 확인하고 있어요.";
-                try { refined = await SpeechInput.RefineAsync(preferences.WhisperUrl, finalWav, lifetime.Token, preferences.Text.CustomWords); }
+                try { refined = await WhisperEngine.Shared.RefineAsync(preferences, finalWav, lifetime.Token); }
                 catch (Exception ex) when (ex is not OperationCanceledException) { notice = "로컬 보정을 사용하지 못해 실시간 인식 결과로 확인했어요. "; }
             }
             if (closed) return;

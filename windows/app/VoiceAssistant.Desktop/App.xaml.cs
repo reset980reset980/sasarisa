@@ -48,6 +48,8 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--phone-ui-preview")) { await ShowPhonePreviewAsync(); return; }
         if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--listening-app-only")) { Shutdown(RunListeningAppChecks()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--whisper-app-only")) { Shutdown(await RunWhisperAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--whisper-job-host")) { Shutdown(await WhisperChecks.RunJobHostAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--vocabulary-app-only")) { Shutdown(await RunVocabularyAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync(e.Args.Contains("--phone-ai"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--combo-app-only")) { Shutdown(await RunComboAppChecksAsync(e.Args.Contains("--combo-native"))); return; }
@@ -77,6 +79,7 @@ public partial class App : System.Windows.Application
         window.ProAccountChanged += RestartRemote;
         window.PhoneRequested += ShowPhone;
         window.SettingsSaved += SaveSettings; window.RefreshDevicesRequested += () => _ = RefreshDevices();
+        window.WhisperSetupRequested += OpenWhisperSetup;
         window.SpeakTestRequested += preview => {StopTurn();_ = SayAsync("안녕하세요. Windows 음성 비서가 준비됐어요.", CancellationToken.None, true,preview);};
         window.OverlayPreviewRequested += preferences =>
         {
@@ -172,7 +175,7 @@ public partial class App : System.Windows.Application
         {
             SettingsStore.Validate(next);
             if (hotkeys != null) hotkeys.Configure(next.Desktop.WakeHotkey, next.Desktop.StopHotkey, () => SettingsStore.Save(next)); else SettingsStore.Save(next);
-            var resume = listening || starting; StopTurn(); StopInput(); brain.ResetAsideSession(); settings = next; microphonePause.Enabled = next.PauseInCalls; ReconcileMicrophonePause();
+            var resume = listening || starting; StopTurn(); StopInput(); WhisperEngine.Shared.Stop(); brain.ResetAsideSession(); settings = next; microphonePause.Enabled = next.PauseInCalls; ReconcileMicrophonePause();
             overlayPreviewUntil = DateTimeOffset.MinValue; overlay.Configure(settings.Desktop);
             window.LoadSettings(settings); window.SetBrainStatus(Brain.StatusFor(settings.BrainProvider)); window.AddMessage("system", "설정을 저장했어요.");
             RestartRemote();
@@ -295,18 +298,20 @@ public partial class App : System.Windows.Application
         try
         {
             var dictationTarget = isDictation ? hands.CaptureInputTarget() : null;
-            if (voice && !string.IsNullOrWhiteSpace(wav) && !string.IsNullOrWhiteSpace(settings.WhisperUrl))
+            if (voice && !string.IsNullOrWhiteSpace(wav) && WhisperEngine.Enabled(settings) && (isDictation || !WhisperText.Quick(parsed)))
             {
                 window.SetStatus("문장을 다듬어 듣는 중", "로컬 Whisper 서버에서 확인하고 있어요.", listening, true);
                 try
                 {
-                    var refined = await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords);
+                    var refined = await WhisperEngine.Shared.RefineAsync(settings, wav, token);
                     token.ThrowIfCancellationRequested();
                     if (interruptedSpeech) refined = BargeInSession.DropGreeting(refined, settings.Desktop.UserName);
                     if (!string.IsNullOrWhiteSpace(refined))
                     {
                         refined = isDictation ? refined.Trim() : LearnedNames.Strip(refined, settings);
-                        LearnVocabulary(text, refined); text = refined;
+                        refined = WhisperText.Select(text, refined);
+                        var refinedPlan = Greetings.Parse(refined, settings) ?? CommandParser.Parse(refined, webSearch);
+                        if (isDictation || parsed == null || refinedPlan != null) { LearnVocabulary(text, refined); text = refined; }
                     }
                     parsed = Greetings.Parse(text, settings) ?? CommandParser.Parse(text, webSearch);
                 }
@@ -594,7 +599,7 @@ public partial class App : System.Windows.Application
     async void Quit()
     {
         if (closing) return;
-        closing = true; StopTurn(); tick?.Stop(); input.Dispose(); output.Dispose();
+        closing = true; StopTurn(); tick?.Stop(); input.Dispose(); output.Dispose(); WhisperEngine.Shared.Dispose();
         window.SetStatus("종료하는 중", "진행 중인 작업을 멈추고 있어요.", false, true); window.IsEnabled = false;
         var stopGrow = StopGrowAsync();
         var stopPhone = StopPhoneAsync();
@@ -605,5 +610,5 @@ public partial class App : System.Windows.Application
         if (!await brain.WaitForAsideStopAsync()) AppPaths.Log("aside-stop", "앱 종료 제한 시간 안에 Aside 작업 중지를 확인하지 못했어요.");
         videoWindow?.Close(); tray?.Dispose(); Native.UnregisterHotKey(handle, 1); Native.UnregisterHotKey(handle, 2); overlay.Close(); window.Close(); Shutdown();
     }
-    protected override void OnExit(ExitEventArgs e) { microphoneMonitor?.Dispose(); displayPower?.Dispose(); hotkeys?.Dispose(); foreach (var owned in ownedWindows) owned.Dispose(); input.Dispose(); output.Dispose(); tray?.Dispose(); showWait?.Unregister(null); quitWait?.Unregister(null); showEvent?.Dispose(); quitEvent?.Dispose(); singleton?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e) { WhisperEngine.Shared.Dispose(); microphoneMonitor?.Dispose(); displayPower?.Dispose(); hotkeys?.Dispose(); foreach (var owned in ownedWindows) owned.Dispose(); input.Dispose(); output.Dispose(); tray?.Dispose(); showWait?.Unregister(null); quitWait?.Unregister(null); showEvent?.Dispose(); quitEvent?.Dispose(); singleton?.Dispose(); base.OnExit(e); }
 }

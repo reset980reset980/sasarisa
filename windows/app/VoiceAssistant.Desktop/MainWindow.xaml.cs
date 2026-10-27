@@ -39,6 +39,7 @@ public sealed record UiSettings
     public Dictionary<string, ProviderPreferences> ProviderProfiles { get; set; } = new();
     public string ProjectDirectory { get; set; } = "";
     public string WhisperUrl { get; set; } = "";
+    public string WhisperMode { get; set; } = "external";
     public DesktopPreferences Desktop { get; set; } = new();
     public TextPreferences Text { get; set; } = new();
 }
@@ -203,6 +204,7 @@ public partial class MainWindow : Window
         _loadingProviders = false;
         ProjectDirectoryInput.Text = settings.ProjectDirectory;
         WhisperUrlInput.Text = settings.WhisperUrl;
+        SelectTag(WhisperModeInput, settings.WhisperMode);
         UpdateProviderFields();
         LoadDesktopPreferences(settings.Desktop);
     });
@@ -392,6 +394,7 @@ public partial class MainWindow : Window
             ProviderProfiles = new(_providerProfiles),
             ProjectDirectory = ProjectDirectoryInput.Text.Trim(),
             WhisperUrl = WhisperUrlInput.Text.Trim(),
+            WhisperMode = SelectedTag(WhisperModeInput),
             Desktop = desktop, Text = textPreferences
         };
         var error = SettingsSaved?.Invoke(settings);

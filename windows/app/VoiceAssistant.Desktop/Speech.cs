@@ -90,17 +90,28 @@ public sealed class SpeechInput : IDisposable
     {
         var u = SettingsStore.ValidateLocalUrl(url);
         var endpoint = new Uri(u.GetLeftPart(UriPartial.Authority) + "/inference");
-        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(25) };
+        return await RefineEndpointAsync(endpoint, wav, ct, words);
+    }
+    internal static async Task<string> RefineEndpointAsync(Uri endpoint, string wav, CancellationToken ct, string[]? words = null)
+    {
+        SettingsStore.ValidateLocalUrl(endpoint.AbsoluteUri);
+        if (wav.Length > 3_000_000) throw new ArgumentException("보정할 음성이 너무 길어요.");
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(25) };
         using var form = new MultipartFormDataContent();
         var content = new ByteArrayContent(Convert.FromBase64String(wav)); content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
         form.Add(content, "file", "speech.wav"); form.Add(new StringContent("ko"), "language"); form.Add(new StringContent("json"), "response_format");
+        form.Add(new StringContent("0"), "temperature"); form.Add(new StringContent("0"), "temperature_inc");
         if (words is { Length: > 0 })
         {
             new TextPreferences { CustomWords = words }.Validate();
             form.Add(new StringContent(string.Join(", ", words)), "prompt");
         }
-        using var res = await client.PostAsync(endpoint, form, ct); res.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)); return doc.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
+        try
+        {
+            using var res = await client.PostAsync(endpoint, form, ct); res.EnsureSuccessStatusCode();
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)); return doc.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("음성 보정 응답 시간이 초과됐어요."); }
     }
 }
 
