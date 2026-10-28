@@ -15,7 +15,7 @@ public static class SettingsTransfer
     public const int MaxBytes = 512 * 1024;
     static readonly JsonSerializerOptions Json = new(SettingsStore.Json) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 16 };
     public static UiSettings Copy(UiSettings settings) => JsonSerializer.Deserialize<UiSettings>(JsonSerializer.Serialize(settings), Json)!;
-    static void CheckTree(JsonElement element)
+    internal static void CheckTree(JsonElement element)
     {
         if (element.ValueKind == JsonValueKind.Null) throw new ArgumentException("빈 설정 값이 있어요. 이 앱에서 내보낸 설정 파일을 선택하세요.");
         if (element.ValueKind == JsonValueKind.Object)
@@ -31,7 +31,7 @@ public static class SettingsTransfer
         if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme is not ("https" or "http") || address.UserInfo.Length > 0 || address.Query.Length > 0 || address.Fragment.Length > 0)
             throw new ArgumentException("AI 서버 주소에 로그인 정보나 쿼리를 넣을 수 없어요.");
     }
-    static void Validate(UiSettings settings)
+    internal static void Validate(UiSettings settings)
     {
         CheckTree(JsonSerializer.SerializeToElement(settings)); SettingsStore.Validate(settings);
         if (settings.Name.Any(char.IsControl) || settings.BrainModel.Length > 300 || settings.ProjectDirectory.Length > 4000 || settings.ProviderProfiles.Count > 16) throw new ArgumentException("설정 값의 길이나 개수를 확인하세요.");
@@ -105,6 +105,7 @@ public static class SettingsTransfer
             Item("이름 발음 보정 · " + name, LearnedNames.For(before, name), LearnedNames.For(after, name));
         Item("말 끝 대기 (초)", before.SilenceSeconds, after.SilenceSeconds); Item("후속 대화 (초)", before.FollowUpSeconds, after.FollowUpSeconds);
         Item("처리 스레드", before.Threads, after.Threads); Item("빠른 호출어 감지", before.Kws, after.Kws); Item("호출어 감지 기준", before.KeywordThreshold, after.KeywordThreshold);
+        Item("인식 입력 증폭", before.InputGain, after.InputGain); Item("호출 이름 인식 단서", before.WakeHints, after.WakeHints);
         Item("다른 앱 마이크 사용 시 자동 대기", before.PauseInCalls, after.PauseInCalls);
         Item("답변 중 끼어들기", before.BargeIn, after.BargeIn);
         Item("유튜브 재생 방식", before.YouTubePlayer, after.YouTubePlayer);

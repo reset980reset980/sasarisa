@@ -286,7 +286,7 @@
                         <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="13" Padding="22" Margin="0,0,0,16"><StackPanel>
                             <TextBlock Text="설정 파일 보관" FontSize="18" FontWeight="SemiBold" />
                             <TextBlock Text="저장된 호출·단축키·인사·단어 설정을 내보내거나 복원합니다. API 키·로그인·기억·루틴·등록 앱은 포함하지 않습니다." Style="{StaticResource HelpText}" Margin="0,10,0,12" />
-                            <WrapPanel><Button Content="설정 내보내기" Style="{StaticResource SecondaryButton}" Padding="14,8" Click="ExportSettings_Click" /><Button Content="설정 가져오기" Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="10,0,0,0" Click="ImportSettings_Click" /></WrapPanel>
+                            <WrapPanel><Button Content="설정 내보내기" Style="{StaticResource SecondaryButton}" Padding="14,8" Click="ExportSettings_Click" /><Button Content="설정 가져오기" Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="10,0,0,0" Click="ImportSettings_Click" /><Button x:Name="ImportMacSettingsButton" Content="Mac 설정 가져오기" Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="10,0,0,0" Click="ImportMacSettings_Click" ToolTip="Mac에서 사용한 .macbutler/config.json을 복사해 선택하세요. 변환 안내와 변경 내용을 확인한 뒤 적용합니다." /></WrapPanel>
                         </StackPanel></Border>
                     </StackPanel>
                 </ScrollViewer>

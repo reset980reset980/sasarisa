@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--mac-settings-app-only")) { Shutdown(MacSettingsAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--speech-resync-app-only")) { Shutdown(RunSpeechResyncAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--browser-page-app-only")) { Shutdown(await RunBrowserPageAppChecksAsync(e.Args.Contains("--browser-edge"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-tuning-app-only")) { Shutdown(RunInputTuningAppChecks()); return; }
