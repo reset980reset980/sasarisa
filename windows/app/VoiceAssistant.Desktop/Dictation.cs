@@ -35,7 +35,7 @@ public sealed record DictationUtterance(DictationControl Control, string Text = 
         var command = CommandParser.Normalize(CommandParser.StripWake(raw, wakeName)).Replace(" ", "").ToLowerInvariant();
         if (command is "지워" or "취소" or "되돌려" or "실행취소" or "undo" or "deletethat") return new(DictationControl.Undo);
         if (command is "엔터" or "보내" or "전송" or "줄바꿈" or "enter" or "newline" or "send") return new(DictationControl.Enter);
-        if (command is "끝" or "받아쓰기끝" or "그만" or "됐어" or "멈춰" or "중지" or "stop") return new(DictationControl.Stop);
+        if (command is "끝" or "받아쓰기끝" or "그만" or "됐어" or "멈춰" or "중지" or "stop" or "stopdictation" or "enddictation" or "finishdictation") return new(DictationControl.Stop);
         var text = raw.Trim();
         var suffix = Regex.Match(text, @"\s+(?:엔터|보내|enter|send)[.!?。！？]*$", RegexOptions.IgnoreCase);
         return suffix.Success ? new(DictationControl.Text, text[..suffix.Index].TrimEnd(), true) : new(DictationControl.Text, text);

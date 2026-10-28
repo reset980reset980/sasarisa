@@ -340,7 +340,7 @@ public partial class App : System.Windows.Application
         text = isDictation ? text.Trim() : LearnedNames.Strip(text, settings); if (string.IsNullOrWhiteSpace(text)) { Wake(); return; }
         if (!isDictation && AnswerSendPreview(text, RemoteExecution.Current != null)) return;
         var parsed = Greetings.Parse(text, settings) ?? CommandParser.Parse(text, webSearch);
-        if (isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", "멈췄어요."); return; }
+        if (isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", StopReply); return; }
         var previousGreeting = greetingWindow; greetingWindow = null; previousGreeting?.Close();
         turn?.Cancel(); var own = RemoteExecution.Current is { } remote ? CancellationTokenSource.CreateLinkedTokenSource(remote.Token) : new CancellationTokenSource(); turn = own; var token = own.Token;
         offerAfterTurn = null; window.SetFreeModeOffer(false);
@@ -373,7 +373,7 @@ public partial class App : System.Windows.Application
             if (isDictation) CancelExecutionOffer();
             var kakaoCommand = isDictation ? null : KakaoCommands.Parse(text);
             AppPaths.Log("command", kakaoCommand == null ? text : "카카오톡 요청");
-            if(isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind=="stop"){StopTurn();window.AddMessage("assistant","멈췄어요.");return;}
+            if(isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind=="stop"){StopTurn();window.AddMessage("assistant",StopReply);return;}
             if (isDictation)
             {
                 window.AddMessage("assistant", await ApplyDictationAsync(text, token, dictationTarget)); return;
@@ -394,7 +394,7 @@ public partial class App : System.Windows.Application
                 token.ThrowIfCancellationRequested(); window.AddMessage("assistant", kakaoReply); await SayAsync(kakaoReply, token); await OfferExecutionModeAsync(token); return;
             }
             parsed = ResolveWithShared(text, parsed, out var sharedUsed);
-            if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", "멈췄어요."); return; }
+            if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", StopReply); return; }
             if (parsed == null)
             {
                 window.SetStatus("생각하는 중", Brain.NameFor(settings.BrainProvider)+"에 연결하고 있어요.", listening, true);
@@ -533,7 +533,7 @@ public partial class App : System.Windows.Application
             case "timer":
                 var added = timers.Add(action.Number, action.Value);
                 actionHistory.Record("타이머 만들기 · " + added.Label, _ => Task.FromResult(timers.Remove(added.Id) ? "방금 만든 타이머를 취소했어요." : "그 타이머는 이미 끝났거나 취소됐어요.")); break;
-            case "list_timers": return timers.Items.Count == 0 ? "진행 중인 타이머가 없어요." : string.Join("\n", timers.Items.OrderBy(x => x.Due).Select(x => $"{x.Due:MM/dd HH:mm:ss} · {x.Label}"));
+            case "list_timers": return timers.Items.Count == 0 ? (settings.Language == "ko" ? "진행 중인 타이머가 없어요." : "No timers are running.") : string.Join("\n", timers.Items.OrderBy(x => x.Due).Select(x => $"{x.Due:MM/dd HH:mm:ss} · {x.Label}"));
             case "open_app":
                 var before = OwnedWindow.VisibleWindows(); var launched = WindowsActions.OpenApp(action.Value);
                 var label = AppRegistry.Default.Find(action.Value)?.Name ?? CommandParser.Apps.First(x => x.Value == action.Value).Key;
@@ -560,6 +560,13 @@ public partial class App : System.Windows.Application
             case "browser_tabs": case "browser_select": case "browser_close": case "browser_select_nth": case "browser_close_nth": case "browser_close_site": case "mail_select":
                 return (await RunBrowserActionAsync(action, token, expected)).Summary;
             case "media":
+                if (action.Value is "mute_on" or "unmute")
+                {
+                    var muteChange = OutputMute.System.Set(action.Value == "mute_on");
+                    if (muteChange.Previous != muteChange.Current)
+                        actionHistory.Record("출력 음소거 변경", _ => { OutputMute.System.Restore(muteChange); return Task.FromResult(settings.Language == "ko" ? "출력 음소거를 이전 상태로 되돌렸어요." : "Restored the previous output mute state."); });
+                    break;
+                }
                 if(action.Value!="mute" && browserVideo is { Opened: true }) return await browserVideo.ControlAsync(action.Value,0,token);
                 if(action.Value!="mute" && videoWindow is {IsClosed:false})return await videoWindow.ControlAsync(action.Value,0,token);
                 WindowsActions.Media(action.Value); break;

@@ -62,7 +62,7 @@ internal static class PhoneChecks
         await using var server = new PhoneServer(Loopback, Path.Combine(folder, "receipts.json"), async (command, token) =>
         {
             Interlocked.Increment(ref calls);
-            if (command.Text == "wait") { entered.TrySetResult(); await Task.Delay(Timeout.Infinite, token); }
+            if (command.Text == "pending fixture") { entered.TrySetResult(); await Task.Delay(Timeout.Infinite, token); }
             return "reply:" + command.Text;
         });
         await server.StartAsync(0); using var probe = new PhoneProbe(server.Url);
@@ -116,15 +116,18 @@ internal static class PhoneChecks
         });
         await Check("Free phone handles stop while busy and isolates another phone's result", async () =>
         {
-            var id = Guid.NewGuid().ToString("N"); await probe.Request("/api/command", new { id, text = "wait" }); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
-            var count = calls; var duplicate = await probe.Request("/api/command", new { id, text = "wait" });
+            // "wait" is an actual stop alias; this fixture must remain ordinary work.
+            var id = Guid.NewGuid().ToString("N"); await probe.Request("/api/command", new { id, text = "pending fixture" }); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            var count = calls; var duplicate = await probe.Request("/api/command", new { id, text = "pending fixture" });
             Require(duplicate.Data.GetProperty("pending").GetBoolean(), "In-flight duplicate lost pending state");
             using var other = new PhoneProbe(server.Url); await other.Pair(server.Code);
             Require((await other.Request("/api/result?id=" + id)).Status == HttpStatusCode.NotFound, "Another phone read result");
             Require((await other.Command("another request")).Contains("다른 요청") && calls == count, "Busy command executed");
             await other.Request("/api/stop", new { });
+            Require((await other.Command("hold on")).Contains("중지"), "English stop alias was not accepted");
             Require((await probe.Request("/api/result?id=" + id)).Data.GetProperty("pending").GetBoolean(), "Other phone cancelled request");
-            await probe.Request("/api/stop", new { }); Require((await probe.Result(id)).Contains("중지"), "Stop failed");
+            Require((await probe.Command("wait")).Contains("중지"), "Owner English stop alias was not accepted");
+            Require((await probe.Result(id)).Contains("중지"), "Stop failed");
         });
         await Check("Free phone revokes a logged-out token immediately", async () =>
         {

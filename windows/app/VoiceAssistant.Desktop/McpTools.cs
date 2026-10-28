@@ -40,7 +40,7 @@ internal static class McpTools
         ["volume_delta"] = ("시스템 음량을 number(-100~100)만큼 조절.", "number"),
         ["volume_status"] = ("현재 시스템 음량 조회.", ""),
         ["display_off"] = ("사용자가 화면/모니터 끄기를 요청한 경우 모니터 전원 끄기. 컴퓨터 종료/절전/잠금이나 창 닫기가 아님. 앱의 실행 설정에 따라 확인하고 실행. 마우스/키 입력으로 다시 켜짐. 결과의 Windows 꺼짐 확인과 단순 요청 전달을 구분할 것.", ""),
-        ["media"] = ("미디어 키 전달. value는 playpause, next, mute 중 하나.", "value"),
+        ["media"] = ("미디어 제어. value: play, pause, playpause, next, mute_on(출력 음소거), unmute(음소거 해제), mute(이전 호환 토글).", "value"),
         ["browser"] = ("선택한 브라우저의 back, forward, refresh 중 하나 실행.", "value"),
         ["browser_tabs"] = ("실제 브라우저 탭 ID/주소/제목 목록. value 생략: 앞 창, all: 모든 창. number 0/1: 첫 페이지, 2 이상: 다음 페이지. 6개씩 조회.", "value? number?"),
         ["browser_select"] = ("방금 탭 목록에서 확인한 ID(value)의 탭 선택. ID 추측 금지.", "value"),

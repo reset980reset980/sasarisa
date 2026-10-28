@@ -6,9 +6,10 @@ namespace VoiceAssistant.Desktop;
 
 public partial class App
 {
+    string StopReply => settings.Language == "ko" ? "멈췄어요." : "Stopped.";
     async Task<string> ApplyDictationAsync(string text, CancellationToken token, WindowsActions.InputTarget? expected = null)
     {
-        if (DictationProcessor.IsStop(text, settings.Name)) { StopTurn(); return "멈췄어요."; }
+        if (DictationProcessor.IsStop(text, settings.Name)) { StopTurn(); return StopReply; }
         var target = expected ?? hands.CaptureInputTarget();
         var edit = await DictationProcessor.PrepareAsync(text, settings, token);
         token.ThrowIfCancellationRequested(); hands.EnsureInputTarget(target);

@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--english-commands-only"))
+        {
+            failed = EnglishCommandChecks.Run(rows);
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "english-command-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, microphoneCapture = false, speakerPlayback = false, realMutations = false, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--speech-capture-only"))
         {
             failed = SpeechCaptureStateChecks.Run(rows);
@@ -359,6 +365,7 @@ public static class Checks
         failed += MicrophoneHealthChecks.Run(rows);
         failed += SpeechCaptureStateChecks.Run(rows);
         failed += NameLearningChecks.Run(rows);
+        failed += EnglishCommandChecks.Run(rows);
         failed += ListeningStateChecks.Run(rows);
         failed += VocabularyChecks.Run(rows);
         failed += await BargeInChecks.RunAsync(rows, args.Contains("--devices"));

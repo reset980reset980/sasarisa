@@ -107,6 +107,8 @@ public static class CommandParser
         ["메모장"] = "notepad",
         ["메모"] = "notepad",
         ["notepad"] = "notepad",
+        ["notes"] = "notepad",
+        ["textedit"] = "notepad",
         ["계산기"] = "calculator",
         ["calculator"] = "calculator",
         ["크롬"] = "chrome",
@@ -117,6 +119,8 @@ public static class CommandParser
         ["탐색기"] = "explorer",
         ["파일 탐색기"] = "explorer",
         ["explorer"] = "explorer",
+        ["finder"] = "explorer",
+        ["file explorer"] = "explorer",
         ["카톡"] = "kakao",
         ["카카오톡"] = "kakao",
         ["클로드"] = "claude",
@@ -126,7 +130,7 @@ public static class CommandParser
         ["코드"] = "vscode"
     };
     public static string Normalize(string s) => Regex.Replace(s.Trim(), @"\s+", " ").TrimEnd('.', '!', '?', '。');
-    public static bool RequiresObservations(string text) => Regex.IsMatch(text, @"검색해서|찾아서|확인해서|살펴보고|확인한\s*(?:뒤|후)|결과\s*중|목록\s*중|제목에.*(?:포함|있는)|있으면|없으면|경우에는");
+    public static bool RequiresObservations(string text) => EnglishCommands.RequiresPlanning(text) || Regex.IsMatch(text, @"검색해서|찾아서|확인해서|살펴보고|확인한\s*(?:뒤|후)|결과\s*중|목록\s*중|제목에.*(?:포함|있는)|있으면|없으면|경우에는");
     public static string StripWake(string text, string name)
     {
         var pattern = string.Join(@"\s*", name.Trim().Select(c => Regex.Escape(c.ToString())));
@@ -137,6 +141,7 @@ public static class CommandParser
     public static CommandPlan? Parse(string input, WebSearchSession searches) => Parse(input, AppRegistry.Default, searches);
     public static CommandPlan? Parse(string input, AppRegistry registry, WebSearchSession? searches = null)
     {
+        if (EnglishCommands.Parse(input, registry, searches) is { } english) return english;
         var s = Normalize(input); var compact = s.Replace(" ", "");
         if (compact is "그만" or "됐어" or "멈춰" or "중지" or "취소" or "stop") return One("멈췄어요.", "stop");
         if (Regex.IsMatch(compact, @"^(?:화면|모니터|디스플레이)(?:을|를)?(?:꺼(?:줘|주세요)?|끄기|끄세요|끄자)$") ||
@@ -149,7 +154,8 @@ public static class CommandParser
         if (dictated.Success) return One("", "dictation_once", dictated.Groups[1].Value);
         if (compact is "타이머취소" or "알람취소") return One("타이머를 취소했어요.", "cancel_timers");
         if (compact is "타이머목록" or "타이머확인" or "남은타이머") return One("타이머 목록을 확인했어요.", "list_timers");
-        if (compact is "음소거" or "소리꺼" or "음소거해제") return One("음소거 상태를 전환했어요.", "media", "mute");
+        if (compact is "음소거" or "소리꺼") return One("출력 소리를 껐어요.", "media", "mute_on");
+        if (compact == "음소거해제") return One("출력 음소거를 해제했어요.", "media", "unmute");
         if (compact is "소리키워" or "볼륨올려" or "소리올려") return One("소리를 높였어요.", "volume_delta", number: 10);
         if (compact is "소리줄여" or "볼륨내려" or "소리낮춰") return One("소리를 낮췄어요.", "volume_delta", number: -10);
         if (compact is "일시정지" or "음악멈춰" or "영상멈춰") return One("미디어 일시정지를 요청했어요.", "media", "pause");
@@ -257,7 +263,7 @@ public static class ActionPolicy
         if (a.Kind is "browser_select" or "browser_close" && (!Guid.TryParse(a.Value, out var tabId) || tabId == Guid.Empty)) throw new InvalidOperationException("방금 확인한 탭 목록의 ID가 필요해요.");
         if (a.Kind == "browser_close_site") _ = WebCommands.Host(a.Value);
         if (a.Kind == "mail_select" && a.Number is < 1 or > 100) throw new InvalidOperationException("메일 번호는 1~100 사이로 지정하세요.");
-        if (a.Kind == "media" && a.Value is not ("play" or "pause" or "playpause" or "next" or "mute")) throw new InvalidOperationException("지원하지 않는 미디어 동작이에요.");
+        if (a.Kind == "media" && a.Value is not ("play" or "pause" or "playpause" or "next" or "mute" or "mute_on" or "unmute")) throw new InvalidOperationException("지원하지 않는 미디어 동작이에요.");
         if(a.Kind=="seek"&&(a.Number==0||Math.Abs((long)a.Number)>3600))throw new InvalidOperationException("영상 이동은 1초~1시간으로 요청하세요.");
         if (a.Kind == "timer" && (a.Number <= 0 || a.Number > 86400)) throw new InvalidOperationException("타이머는 1초~24시간으로 설정하세요.");
         if (a.Kind == "cancel_timer" && (!Guid.TryParse(a.Value, out var timerId) || timerId == Guid.Empty)) throw new InvalidOperationException("타이머 목록의 정확한 ID가 필요해요.");

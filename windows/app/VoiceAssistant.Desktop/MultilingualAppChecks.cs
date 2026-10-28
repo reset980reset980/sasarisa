@@ -96,6 +96,31 @@ public partial class App
                 Require(heardLanguage == "en" && brainCalls == calls + 1 && requests == audioCalls + 1 && brainPrompt.Contains("tell me the colour of a cloud") && brainPrompt.Contains("briefly in English"), "Primary transcript or language failed to reach Brain");
                 Require(timers.Items.Count == timersBefore && !busy && languageRecognition == null, "Unverified worker text executed or processing remained busy");
             });
+            await Check("Primary English time speech stays local with one transcription and no AI request", async () =>
+            {
+                Reset(); reply = "Jarvis tell me the time"; var calls = brainCalls; var audioCalls = requests; var timersBefore = timers.Items.Count;
+                var log = Path.Combine(AppPaths.Home, "assistant.log"); var before = File.Exists(log) ? File.ReadAllText(log).Length : 0;
+                await Final().WaitAsync(TimeSpan.FromSeconds(5));
+                Require(heardLanguage == "en" && requests == audioCalls + 1 && brainCalls == calls && timers.Items.Count == timersBefore && !busy, "English quick command reached AI or raw worker timer");
+                Require(File.ReadAllText(log)[before..].Contains("[reply] It's "), "Actual English answer did not reach output");
+            });
+            await Check("Primary English reminder label persists and actual list and cancel submissions stay local", async () =>
+            {
+                Reset(); timers.Clear(); reply = "Jarvis remind me in two minutes to check if locked";
+                var calls = brainCalls; var audioCalls = requests;
+                await Final().WaitAsync(TimeSpan.FromSeconds(5));
+                Require(requests == audioCalls + 1 && brainCalls == calls && timers.Items.Count == 1 && timers.Items.Single().Label == "check if locked", "Reminder data lost or used as a condition");
+                await SubmitAsync("list timers", false);
+                var log = File.ReadAllText(Path.Combine(AppPaths.Home, "assistant.log")); Require(log.Contains("[reply]") && log.Contains("check if locked"), "Timer list did not reach output");
+                await SubmitAsync("cancel all timers", false); await SubmitAsync("list timers", false);
+                Require(timers.Items.Count == 0 && brainCalls == calls && File.ReadAllText(Path.Combine(AppPaths.Home, "assistant.log")).Contains("[reply] No timers are running."), "English timer cleanup or empty list failed");
+            });
+            await Check("English dictation stop submission exits without starting capture or AI", async () =>
+            {
+                Reset(); dictating = true; var calls = brainCalls;
+                await SubmitAsync("Jarvis stop dictation", true);
+                Require(!dictating && !busy && brainCalls == calls && StopReply == "Stopped.", "English stop typed text or kept dictation active");
+            });
             await Check("Background speech uncertain words subtitles and HTTP failures cannot execute raw worker text", async () =>
             {
                 var calls = brainCalls; var timersBefore = timers.Items.Count;
