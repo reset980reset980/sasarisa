@@ -20,18 +20,24 @@ public partial class App
         }
         if (requestSettings.BrainProvider == "aside")
         {
-            if (RemoteExecution.Current != null) throw new AgentStoppedException("Aside 웹 작업은 현재 PC에서 요청해야 해요. 휴대폰 원격 연결은 아직 지원하지 않습니다.");
+            var remoteRequest = RemoteExecution.Current;
             void Progress(string value) => Dispatcher.BeginInvoke(() =>
             {
                 if (token.IsCancellationRequested || closing) return;
                 window.SetStatus("Aside 작업 중", value, listening, true);
                 overlay.SetContent("Aside 작업 중", value, true); overlay.ShowOverlay();
             });
-            void Notice(string value) => Dispatcher.BeginInvoke(() =>
+            void Notice(string value)
             {
+                // Capture before queuing UI work: a canceled remote scope may end
+                // before its Dispatcher callback runs.
+                remoteRequest?.ExecutionNotice(value);
+                Dispatcher.BeginInvoke(() =>
+                {
                 AppPaths.Log("aside-stop", value);
                 if (!closing) window.AddMessage("system", value);
-            });
+                });
+            }
             var reply = await brain.AskAsideAsync(text, personal.MemoryContext + "\n" + webSearch.Context + "\n" + screen, requestSettings, token, Progress, Notice);
             token.ThrowIfCancellationRequested();
             return new(reply, Array.Empty<ActionObservation>(), true);

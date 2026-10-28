@@ -227,7 +227,7 @@ public sealed class PhoneServer : IAsyncDisposable
                 if (++session.Requests > 12) { context.Response.StatusCode = 429; result = new { error = "명령이 너무 많아요. 1분 뒤 다시 보내세요." }; }
                 else
                 {
-                    var command = new RemoteCommand(id, text, session.Account, lifetime.Token);
+                    var command = new RemoteCommand(id, text, session.Account, lifetime.Token, session.Account);
                     var receipt = ledger.Claim(command).Receipt; // durable BEFORE execution
                     if (isStop(text))
                     {

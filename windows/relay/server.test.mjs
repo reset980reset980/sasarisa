@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import http from 'node:http';
 import {createRelay} from './server.mjs';
 
@@ -32,6 +32,18 @@ test('paired phone sees standard or preview profile from its own PC, including r
   }
 });
 
+test('desktop receives stable per-phone identity without raw credentials or client-supplied identity',async t=>{
+  const f=await fixture(t), other=(await f.request('/api/pair',{code:f.desktop.code})).body;
+  async function send(token) {
+    const key=id();await f.request('/api/command',{id:key,text:'Aside 시험',peer:'forged'},token);
+    const command=(await f.request('/api/desktop/poll',undefined,f.desktop.token)).body.command;
+    await f.request('/api/desktop/done',{id:key,result:'ok'},f.desktop.token);return command;
+  }
+  const first=await send(f.phone.token), again=await send(f.phone.token), second=await send(other.token);
+  assert.match(first.peer,/^[a-f0-9]{64}$/);assert.equal(first.peer,again.peer);assert.notEqual(first.peer,second.peer);
+  assert.notEqual(first.peer,f.phone.token);assert.notEqual(first.peer,f.desktop.token);assert.notEqual(first.peer,'forged');
+});
+
 test('legacy PC is explicitly unknown and malformed profile text is refused',async t=>{
   const f=await fixture(t);assert.deepEqual(f.phone.client,{kind:'unknown',version:''});
   for(const client of [{kind:'standard',version:'<script>'},{kind:'admin',version:'0.2.28'},null])
@@ -53,7 +65,7 @@ test('unknown token, foreign origin and rebinding host cannot access desktop or 
 test('command crosses both clients, scoped result is returned once, replay does not enqueue',async t=>{
   const f=await fixture(t),key=id();
   assert.equal((await f.request('/api/command',{id:key,text:'지금 몇 시야'},f.phone.token)).body.pending,true);
-  const delivery=await f.request('/api/desktop/poll',undefined,f.desktop.token); assert.deepEqual(delivery.body.command,{id:key,text:'지금 몇 시야'});
+  const delivery=await f.request('/api/desktop/poll',undefined,f.desktop.token); assert.deepEqual(delivery.body.command,{id:key,text:'지금 몇 시야',peer:createHash('sha256').update(f.phone.token).digest('hex')});
   await f.request('/api/desktop/done',{id:key,result:'오후 3시입니다.'},f.desktop.token);
   const duplicate=await f.request('/api/command',{id:key,text:'changed'},f.phone.token); assert.deepEqual(duplicate.body,{pending:false,result:'오후 3시입니다.'});
   assert.equal((await f.request('/api/desktop/poll',undefined,f.desktop.token)).body.command,null);

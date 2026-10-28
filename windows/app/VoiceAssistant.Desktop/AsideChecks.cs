@@ -85,6 +85,39 @@ internal static class AsideChecks
             await c.AskAsync("five", "", "different", CancellationToken.None);
             Require(f.Tasks.All(a => a.Contains("exec")), "Expired or cross-account conversation reused");
         });
+        await Check("Aside remote conversations isolate PC and paired phones and pin execution to this PC", async () =>
+        {
+            var f = new Fixture(); var c = new AsideClient(f.Run, findBinary: () => "aside.exe");
+            await c.AskAsync("phone first", "", "", default, conversationScope: "remote:phone-A", remote: true);
+            await c.AskAsync("phone follow-up", "", "", default, conversationScope: "remote:phone-A", remote: true);
+            await c.AskAsync("other phone", "", "", default, conversationScope: "remote:phone-B", remote: true);
+            await c.AskAsync("local", "", "", default);
+            await c.AskAsync("back to phone", "", "", default, conversationScope: "remote:phone-A", remote: true);
+            var calls = f.Tasks.ToArray();
+            Require(calls[1].Contains("resume") && new[] { 0, 2, 3, 4 }.All(i => calls[i].Contains("exec")), "Conversation crossed a source boundary");
+            Require(new[] { 0, 1, 2, 4 }.All(i => calls[i].Take(4).SequenceEqual(new[] { "--permission", "guard", "--host", "local" }) && calls[i][^1].Contains("휴대폰")), "Remote host or permission/prompt boundary missing");
+        });
+        await Check("Aside remote cancellation targets the local host and only its captured session", async () =>
+        {
+            var f = new Fixture { CancelRun = true }; var c = new AsideClient(f.Run, findBinary: () => "aside.exe");
+            using var stop = new CancellationTokenSource();
+            try { await c.AskAsync("phone", "", "", stop.Token, p => { if (p.Contains("세션")) stop.Cancel(); }, conversationScope: "remote:A", remote: true); throw new Exception("Ignored cancellation"); }
+            catch (OperationCanceledException) { }
+            Require(f.Calls.Last().SequenceEqual(new[] { "--host", "local", "--account", "u0", "session", "stop", "fixture_123" }), "Stopped another host or session");
+        });
+        await Check("Internet phone identity rejects malformed peers and isolates legacy requests", () =>
+        {
+            using var legacy = JsonDocument.Parse("{}");
+            Require(InternetPhone.Conversation(legacy.RootElement, "one") != InternetPhone.Conversation(legacy.RootElement, "two"), "Legacy relay joined phone conversations");
+            using var valid = JsonDocument.Parse(JsonSerializer.Serialize(new { peer = new string('a', 64) }));
+            Require(InternetPhone.Conversation(valid.RootElement, "one") == InternetPhone.Conversation(valid.RootElement, "two"), "Stable peer was not preserved");
+            foreach (var json in new[] { "{\"peer\":null}", "{\"peer\":7}", "{\"peer\":\"forged\"}" })
+            {
+                using var invalid = JsonDocument.Parse(json);
+                try { InternetPhone.Conversation(invalid.RootElement, "one"); throw new Exception("Malformed peer accepted"); } catch (InvalidOperationException) { }
+            }
+            return Task.CompletedTask;
+        });
         await Check("Aside nonzero exit never reports stdout as success and clears continuation", async () =>
         {
             var f = new Fixture { Exit = 7, Error = "Unauthorized private-token-value", Output = "완료했어요" }; var c = new AsideClient(f.Run, findBinary: () => "aside.exe");

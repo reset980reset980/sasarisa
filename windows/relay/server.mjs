@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes, randomInt, createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -106,7 +106,7 @@ export async function createRelay({origin, clock = Date.now, pollMs = 20000, web
             });
             if (room.closed) return json(401,{error:'PC 연결이 종료됐어요.'});
             const row = ready(); if (row) row.sent = clock(); room.seen = clock();
-            return json(200,{command:row ? {id:row.id,text:row.text} : null,cancelled:[...room.commands.values()].filter(row=>!row.done&&row.cancelled).map(row=>row.id),connected:room.phones.size});
+            return json(200,{command:row ? {id:row.id,text:row.text,peer:createHash('sha256').update(row.owner).digest('hex')} : null,cancelled:[...room.commands.values()].filter(row=>!row.done&&row.cancelled).map(row=>row.id),connected:room.phones.size});
           } finally { room.polling = false; }
         }
         return json(404,{error:'요청 주소를 확인하세요.'});

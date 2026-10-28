@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--aside-phone-app-only")) { Shutdown(await RunAsidePhoneAppChecksAsync(e.Args.Contains("--aside-internet"), e.Args.Contains("--aside-native"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--text-edit-fixture")) { await RunTextEditFixtureAsync(e.Args[^1]); Shutdown(); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--text-undo-app-only")) { Shutdown(await RunTextEditAppChecksAsync()); return; }
         if (e.Args.FirstOrDefault() == "--capture-window") { Shutdown(VisualCapture.Run(e.Args)); return; }

@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace VoiceAssistant.Desktop;
 
-public sealed record RemoteCommand(string Id, string Text, string Account, CancellationToken Lease);
+public sealed record RemoteCommand(string Id, string Text, string Account, CancellationToken Lease, string? ConversationId = null);
 public sealed record RemoteReceipt(string Id, string Account, string Result, DateTimeOffset Created, bool Acknowledged = false);
 public sealed class RemoteUnavailable(string message, TimeSpan retry) : InvalidOperationException(message)
 { public TimeSpan Retry { get; } = retry; }

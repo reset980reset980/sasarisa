@@ -86,7 +86,16 @@ public sealed class InternetPhone : IRemoteTransport, IAsyncDisposable
         var commandId = command.GetProperty("id").GetString()!; var text = command.GetProperty("text").GetString()!;
         if (!Guid.TryParseExact(commandId, "N", out _) || string.IsNullOrWhiteSpace(text) || text.Length > 1200) throw new InvalidOperationException("Invalid relay command");
         var own = leases.GetOrAdd(commandId, _ => CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token));
-        return new(commandId, text, AccountIdentity, own.Token);
+        return new(commandId, text, AccountIdentity, own.Token, Conversation(command, commandId));
+    }
+    internal static string Conversation(JsonElement command, string requestId)
+    {
+        // Older relays did not identify the phone: never resume another phone's
+        // conversation merely because both are connected to the same PC room.
+        if (!command.TryGetProperty("peer", out var value)) return "request:" + requestId;
+        if (value.ValueKind != JsonValueKind.String || value.GetString() is not { Length: 64 } peer || !System.Linq.Enumerable.All(peer, Uri.IsHexDigit))
+            throw new InvalidOperationException("Invalid relay phone identity");
+        return "peer:" + peer.ToUpperInvariant();
     }
     public async Task<bool> ReplyAsync(RemoteReceipt receipt, CancellationToken token)
     {

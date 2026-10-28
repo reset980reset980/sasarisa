@@ -1,5 +1,7 @@
 # Internet phone connection
 
+Desktop 0.2.36 also reads the optional `peer` on desktop command delivery. The relay derives it as SHA-256 of the authenticated phone token, ignoring any client-supplied field. It is stable for that pairing, differs between phones, and never transmits the phone credential to the desktop. Aside sessions are scoped to this identity as well as the PC connection. Older desktops ignore the added field; newer desktops treat deliveries from older relays without `peer` as separate conversations for every request. Re-pairing creates a new identity.
+
 Desktop 0.2.28 sends a bounded `client` profile (`standard` or `preview`, semantic version) at session creation. It is visible only in authenticated pairing/status replies. Older clients are explicitly `unknown`, so an old clock-only preview is never presented as a verified normal connection. The mobile page explains preview limits and how to reconnect from the normal app. PC speech settings and failures are reported in command replies; playback remains on the PC.
 
 This free, self-hosted relay adds Internet connectivity alongside the existing LAN server. Both the Windows PC and phone connect outward over HTTPS. Neither port forwarding nor access to the same Wi-Fi is required. A workplace must allow access to the selected HTTPS origin; this does not bypass network policies.

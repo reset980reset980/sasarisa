@@ -7,14 +7,18 @@ using System.Threading.Tasks;
 
 namespace VoiceAssistant.Desktop;
 
-internal sealed class RemoteExecution(CancellationToken token)
+internal sealed class RemoteExecution(CancellationToken token, string? conversation = null)
 {
     static readonly AsyncLocal<RemoteExecution?> scope = new();
     readonly List<string> replies = new();
+    readonly List<string> notices = new();
     string voiceNotice = "";
     public static RemoteExecution? Current => scope.Value;
     public CancellationToken Token { get; } = token;
+    public string ConversationScope { get; } = "remote:" + (conversation ?? Guid.NewGuid().ToString("N"));
     public void VoiceNotice(string text) => voiceNotice = RemoteText.Clip(text, 140);
+    public void ExecutionNotice(string text)
+    { lock (notices) if (notices.Count < 3 && !notices.Contains(text)) notices.Add(RemoteText.Clip(text, 160)); }
     public void Capture(string role, string text)
     {
         if (role is not ("assistant" or "error") || string.IsNullOrWhiteSpace(text)) return;
@@ -25,11 +29,12 @@ internal sealed class RemoteExecution(CancellationToken token)
         var previous = scope.Value; scope.Value = this;
         try { Token.ThrowIfCancellationRequested(); await action(); }
         finally { scope.Value = previous; }
-        if (Token.IsCancellationRequested) return "요청을 중지했거나 처리 시간이 초과됐어요. 이미 실행된 동작은 PC 화면에서 확인하세요.";
+        string notice; lock (notices) notice = string.Join("\n", notices);
+        if (Token.IsCancellationRequested) return RemoteText.Clip(notice + (notice.Length > 0 ? "\n" : "") + "요청을 중지했거나 처리 시간이 초과됐어요. 이미 실행된 동작은 PC 화면에서 확인하세요.", 400);
         lock (replies)
         {
             var answer = replies.Count == 0 ? "완료 응답을 확인하지 못했어요. PC의 비서 화면을 확인하세요." : string.Join("\n", replies);
-            return RemoteText.Clip((voiceNotice.Length > 0 ? voiceNotice + "\n" : "") + answer, 400);
+            return RemoteText.Clip((notice.Length > 0 ? notice + "\n" : "") + (voiceNotice.Length > 0 ? voiceNotice + "\n" : "") + answer, 400);
         }
     }
     public static void Guard(AssistantAction action, bool fromAi)
@@ -88,7 +93,7 @@ public partial class App
             return "PC에서 다른 작업을 처리 중이에요. 끝난 뒤 다시 요청해 주세요.";
         var text = LearnedNames.Strip(command.Text, settings);
         if (string.IsNullOrWhiteSpace(text)) return "호출 이름 뒤에 실행할 내용을 함께 보내 주세요.";
-        var context = new RemoteExecution(token);
+        var context = new RemoteExecution(token, (localPhone ? "phone:" : "pro:") + command.Account + ":" + (command.ConversationId ?? command.Id));
         if (!localPhone) window.SetRemoteStatus("휴대폰 요청을 처리 중이에요.");
         return await context.RunAsync(() => SubmitAsync(text, false));
     }
