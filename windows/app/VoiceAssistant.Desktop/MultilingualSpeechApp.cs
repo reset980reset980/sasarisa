@@ -39,7 +39,7 @@ public partial class App
     void CancelMultilingualRecognition()
     {
         var previous = languageRecognition; languageRecognition = null;
-        if (languageRecognitionBusy) { languageRecognitionBusy = false; busy = false; }
+        if (languageRecognitionBusy) { languageRecognitionBusy = false; busy = turn != null; }
         previous?.Cancel();
     }
     void BeginMultilingualRecognition(JsonElement message)
@@ -74,7 +74,7 @@ public partial class App
             }
             if (!result.Accepted) return;
             languageRecognition = null; languageRecognitionBusy = false; // Submit/Capture may cancel unrelated pending recognition.
-            if (!barge) busy = false;
+            if (!barge) busy = turn != null;
             if (settings.Activation == "hold") holding = false;
             microphonePause.EndManual();
             if (result.Wake) awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds);
@@ -96,7 +96,7 @@ public partial class App
             if (languageRecognition == own)
             {
                 languageRecognition = null; languageRecognitionBusy = false;
-                if (!barge) { busy = false; holding = false; microphonePause.EndManual(); CaptureInput(ShouldCaptureSpeech()); RefreshStatus(); }
+                if (!barge) { busy = turn != null; holding = false; microphonePause.EndManual(); CaptureInput(ShouldCaptureSpeech()); RefreshStatus(); }
             }
             own.Dispose();
         }

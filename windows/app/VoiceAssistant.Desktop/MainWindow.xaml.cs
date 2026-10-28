@@ -23,6 +23,8 @@ public sealed record UiSettings
     public string Language { get; set; } = "ko";
     public bool FreeMode { get; set; }
     public bool FreeModeAsked { get; set; }
+    public string ConfirmDelegate { get; set; } = "always";
+    public bool PreviewBeforeSend { get; set; }
     public string Name { get; set; } = "자비스";
     public Dictionary<string, string[]> LearnedWakes { get; set; } = new();
     public string[] WakeWords { get; set; } = Array.Empty<string>();
@@ -211,6 +213,8 @@ public partial class MainWindow : Window
         NameInput.Text = settings.Name;
         LanguageInput.SelectedValue = settings.Language;
         FreeModeInput.IsChecked = settings.FreeMode;
+        SelectTag(ConfirmDelegateInput, settings.ConfirmDelegate);
+        PreviewBeforeSendInput.IsChecked = settings.PreviewBeforeSend;
         WakeWordsInput.Text = string.Join(Environment.NewLine, settings.WakeWords);
         _selectedDevice = settings.Device;
         _inputDeviceSource = settings.Device;
@@ -427,6 +431,8 @@ public partial class MainWindow : Window
             Language = LanguageInput.SelectedValue as string ?? "ko",
             FreeMode = FreeModeInput.IsChecked == true,
             FreeModeAsked = _loadedSettings.FreeModeAsked || (FreeModeInput.IsChecked == true) != _loadedSettings.FreeMode,
+            ConfirmDelegate = SelectedTag(ConfirmDelegateInput),
+            PreviewBeforeSend = PreviewBeforeSendInput.IsChecked == true,
             WakeWords = wakeWords,
             LearnedWakes = new(_loadedSettings.LearnedWakes),
             Device = (DeviceInput.SelectedItem as DeviceOption)?.Id ?? _selectedDevice,

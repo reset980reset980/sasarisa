@@ -97,7 +97,7 @@ internal static class ExecutionConsentChecks
                 }
                 finally { review.Close(); }
                 Require(!view.IsVisible && PresentationSource.FromVisual(view) == null, "Settings window was presented");
-                var section = (FrameworkElement)view.FindName("ExecutionConsentSection"); section.Measure(new Size(650, 300)); section.Arrange(new Rect(0, 0, 650, section.DesiredSize.Height)); section.UpdateLayout();
+                var section = (FrameworkElement)view.FindName("ExecutionConsentSection"); section.Measure(new Size(650, double.PositiveInfinity)); section.Arrange(new Rect(0, 0, 650, section.DesiredSize.Height)); section.UpdateLayout();
                 var bounds = new Rect(0, 0, 650, section.ActualHeight); var drawing = new DrawingVisual();
                 using (var context = drawing.RenderOpen()) { context.DrawRectangle(Brushes.White, null, bounds); context.DrawRectangle(new VisualBrush(section), null, bounds); }
                 var bitmap = new RenderTargetBitmap(650, Math.Max(1, (int)Math.Ceiling(bounds.Height)), 96, 96, PixelFormats.Pbgra32); bitmap.Render(drawing);
@@ -207,6 +207,60 @@ internal static class ExecutionConsentChecks
             Require(!offer.Begin(settings with { FreeModeAsked = true }, ActionEffect.Send, false), "Offer repeated after owner choice");
             offer.Begin(settings, ActionEffect.Send, false); Require(offer.Answer("네!", false) == FreeModeAnswer.Yes && !offer.Pending, "Explicit local yes was lost");
             return Task.CompletedTask;
+        });
+        await Check("Execution styles distinguish direct and AI delegation without weakening payments unknown targets or preview", () =>
+        {
+            Require(new UiSettings().ConfirmDelegate == "always", "Old Windows profile lost its confirmation default");
+            var delegateAction = new AssistantAction("delegate", "Fix the project"); var aiDelegate = new AssistantAction("delegate_session", "Fix the project", Target: Guid.NewGuid().ToString("N"));
+            foreach (var mode in new[] { "never", "brain", "always" })
+            {
+                var options = new UiSettings { ConfirmDelegate = mode };
+                Require(ExecutionConsent.Decide(options, delegateAction, false, ActionEffect.Delegate, false) == (mode == "always" ? ConsentDecision.Ask : ConsentDecision.Run), "Direct delegation style ignored");
+                Require(ExecutionConsent.Decide(options, aiDelegate, true, ActionEffect.Delegate, false) == ConsentDecision.Ask, "AI delegated without consent");
+                Require(ExecutionConsent.Decide(options, new("press_control", "id"), true, ActionEffect.None, false) == (mode == "always" ? ConsentDecision.Ask : ConsentDecision.Run), "Observed ordinary target style ignored");
+                foreach (var effect in new[] { ActionEffect.Send, ActionEffect.Post, ActionEffect.Delete, ActionEffect.Payment, ActionEffect.Unknown })
+                    Require(ExecutionConsent.Decide(options, new("press_control", "id"), true, effect, false) == ConsentDecision.Ask, "Execution style bypassed irreversible or unknown action");
+                Require(ExecutionConsent.Decide(options, delegateAction, false, ActionEffect.Delegate, true) == ConsentDecision.HoldRemote, "Execution style granted remote rights");
+                options = options with { FreeMode = true, PreviewBeforeSend = true };
+                Require(ExecutionConsent.Decide(options, aiDelegate, true, ActionEffect.Delegate, true) == ConsentDecision.HoldRemote, "Free mode bypassed remote preview");
+            }
+            bool invalid = false; try { SettingsStore.Validate(new UiSettings { ConfirmDelegate = "never\n" }); } catch (ArgumentException) { invalid = true; }
+            Require(invalid, "Invalid execution style accepted"); return Task.CompletedTask;
+        });
+        await Check("Execution style and send preview survive explicit Save and require independent import permission", () =>
+        {
+            var current = new UiSettings(); var view = new MainWindow(); view.LoadSettings(current);
+            try
+            {
+                view.SettingsSaved += next => { current = next; view.LoadSettings(next); return null; };
+                var modes = (ComboBox)view.FindName("ConfirmDelegateInput"); modes.SelectedItem = modes.Items.Cast<ComboBoxItem>().Single(x => (string)x.Tag == "brain");
+                ((CheckBox)view.FindName("PreviewBeforeSendInput")).IsChecked = true;
+                Require(current.ConfirmDelegate == "always" && !current.PreviewBeforeSend, "Draft changed live consent"); view.SaveSettingsForCheck();
+                Require(current.ConfirmDelegate == "brain" && current.PreviewBeforeSend, "Actual Save lost new preferences");
+                var imported = SettingsTransfer.Parse(SettingsTransfer.Serialize(current with { ConfirmDelegate = "never", PreviewBeforeSend = false }));
+                Require(SettingsTransfer.Prepare(imported, current, true, true).ConfirmDelegate == "brain" && SettingsTransfer.Prepare(imported, current, true, true).PreviewBeforeSend, "Unrelated import lowered confirmation");
+                var next = SettingsTransfer.Prepare(imported, current, false, false, permissions: true);
+                Require(next.ConfirmDelegate == "never" && !next.PreviewBeforeSend && SettingsTransfer.Describe(current, next).Contains("전송 전 미리 보기"), "Explicit permissions omitted from import review");
+                var mac = MacSettingsTransfer.Parse("{\"confirmDelegate\":\"brain\",\"previewBeforeSend\":true}", new UiSettings());
+                Require(mac.Settings.ConfirmDelegate == "brain" && mac.Settings.PreviewBeforeSend && !SettingsTransfer.Prepare(mac.Settings, new UiSettings(), false, false).PreviewBeforeSend, "Mac preview rights were dropped or auto-applied");
+                Require(PresentationSource.FromVisual(view) == null && !view.IsVisible, "Settings native window created");
+            }
+            finally { view.Close(); }
+            return Task.CompletedTask;
+        });
+        await Check("Send previews expire and accept only a timely exact local answer once", async () =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            foreach (var answer in new[] { "네", "아니", "네, 다른 사람에게 보내", "yes please delete", "YES!" })
+            {
+                var preview = new SendPreview(() => now); preview.Begin(); var pending = preview.WaitAsync(default);
+                var accepted = preview.Answer(answer, false); var sent = await pending;
+                Require(sent == (answer is "네" or "YES!") && accepted == (answer is "네" or "아니" or "YES!"), "A new command became a send approval");
+                Require(!preview.Pending && !preview.Answer("네", false), "Send permission replayed");
+            }
+            var expired = new SendPreview(() => now); expired.Begin(); now += TimeSpan.FromSeconds(21); Require(!expired.Answer("네", false) && !await expired.WaitAsync(default), "Expired preview sent");
+            var remote = new SendPreview(); remote.Begin(); Require(!remote.Answer("yes", true) && !await remote.WaitAsync(default), "Remote answer approved local send");
+            var stopped = new SendPreview(); stopped.Begin(); stopped.Cancel(); Require(!await stopped.WaitAsync(default), "Stopped preview sent");
         });
         return failed;
     }

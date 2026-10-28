@@ -89,6 +89,7 @@ public partial class App : System.Windows.Application
         overlay.Configure(settings.Desktop);
         window.CommandSubmitted += text => _ = SubmitAsync(text, false);
         window.FreeModeAnswered += SubmitFreeModeAnswer;
+        window.SendPreviewAnswered += yes => AnswerSendPreview(yes ? "네" : "아니", false);
         window.ListenToggled += ToggleListening; window.WakeRequested += Wake; window.StopRequested += StopTurn;
         window.QuitRequested += Quit;
         window.ProAccountChanged += RestartRemote;
@@ -231,7 +232,7 @@ public partial class App : System.Windows.Application
             if(!listening&&!starting)StartListening();
             overlay.SetContent("눌러서 말하기",HotkeyLabel+"를 누른 채 말하고, 다 말하면 키를 놓으세요.",false);overlay.ShowOverlay();overlayUntil=DateTimeOffset.Now.AddSeconds(8);return;
         }
-        if (busy || speaking) StopTurn();
+        if (speaking || busy && !AwaitingSendPreview) StopTurn();
         if (!listening && !starting) StartListening();
         BeginManualMicrophone();
         awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds); CaptureInput(true);
@@ -241,7 +242,7 @@ public partial class App : System.Windows.Application
     {
         if(personalEditorOpen || holding)return;
         if (!listening && !starting) RememberListening(true);
-        StopTurn(preserveExecutionOffer: freeModeOffer.Pending && !busy && !speaking);if(!listening&&!starting)StartListening();
+        if (!AwaitingSendPreview || speaking) StopTurn(preserveExecutionOffer: freeModeOffer.Pending && !busy && !speaking);if(!listening&&!starting)StartListening();
         BeginManualMicrophone();
         holding=true;awakeUntil=DateTimeOffset.MaxValue;CaptureInput(true);
         overlay.SetContent("누르는 동안 듣고 있어요","다 말하면 키를 놓으세요. 최대 30초까지 말할 수 있어요.",false);overlay.ShowOverlay();RefreshStatus();
@@ -255,6 +256,7 @@ public partial class App : System.Windows.Application
     void StopTurn(bool preserveExecutionOffer)
     {
         if (!preserveExecutionOffer) CancelExecutionOffer();
+        CancelSendPreview();
         CancelMultilingualStartup();
         CancelWakeCheck();
         EndSpeechBarge(true, false); waitingBarge = false; bargeInputUntil = DateTimeOffset.MinValue;
@@ -296,7 +298,7 @@ public partial class App : System.Windows.Application
                 signalPartials++;
                 if (wakeCheck != null && message.TryGetProperty("utterance", out var nextUtterance) && nextUtterance.GetInt32() > wakeCheckUtterance) CancelWakeCheck();
                 if (speaking) TryBargeText(message);
-                if (!speaking && !busy && listening)
+                if (!speaking && (!busy || AwaitingSendPreview) && listening)
                 {
                     var text = message.GetProperty("text").GetString() ?? "";
                     window.SetPartial(text.Length == 0 ? "" : awakeUntil > DateTimeOffset.Now ? text : "들은 말: " + text + " · 호출어를 말하거나 ‘지금 말하기’를 누르세요.");
@@ -308,12 +310,12 @@ public partial class App : System.Windows.Application
                 signalFinals++;
                 if (message.TryGetProperty("needs_transcription", out var primary) && primary.ValueKind == JsonValueKind.True)
                 {
-                    if (settings.Language == "ko" || !listening || busy && !speaking) break;
+                    if (settings.Language == "ko" || !listening || busy && !speaking && !AwaitingSendPreview) break;
                     var segment = message.GetProperty("utterance").GetInt32(); if (segment <= lastUtterance) break; lastUtterance = segment;
                     BeginMultilingualRecognition(message); break;
                 }
                 if (speaking) TryBargeText(message);
-                if (!listening || speaking || busy) break;
+                if (!listening || speaking || busy && !AwaitingSendPreview) break;
                 var id = message.GetProperty("utterance").GetInt32(); if (id <= lastUtterance) break; lastUtterance = id;
                 CancelWakeCheck();
                 if (message.GetProperty("has_wake").GetBoolean() && settings.Activation == "voice") awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds);
@@ -334,6 +336,7 @@ public partial class App : System.Windows.Application
         var isDictation = dictating && voice;
         if (interruptedSpeech) text = BargeInSession.DropGreeting(text, settings.Desktop.UserName);
         text = isDictation ? text.Trim() : LearnedNames.Strip(text, settings); if (string.IsNullOrWhiteSpace(text)) { Wake(); return; }
+        if (!isDictation && AnswerSendPreview(text, RemoteExecution.Current != null)) return;
         var parsed = Greetings.Parse(text, settings) ?? CommandParser.Parse(text, webSearch);
         if (isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", "멈췄어요."); return; }
         var previousGreeting = greetingWindow; greetingWindow = null; previousGreeting?.Close();
@@ -404,7 +407,7 @@ public partial class App : System.Windows.Application
             }
             token.ThrowIfCancellationRequested(); foreach (var action in parsed.Actions) { ActionPolicy.Validate(action); RemoteExecution.Guard(action, false, preparing: true); }
             var confirmations = parsed.Actions.Where(x => ActionPolicy.NeedsConfirmation(x, false)).ToArray();
-            if (settings.FreeMode && confirmations.All(a => ExecutionConsent.Decide(true, a, false, ExecutionConsent.Effect(a), RemoteExecution.Current != null) == ConsentDecision.Run))
+            if (confirmations.All(a => ExecutionConsent.Decide(settings, a, false, ExecutionConsent.Effect(a), RemoteExecution.Current != null) == ConsentDecision.Run))
             {
                 foreach (var action in confirmations) RemoteExecution.Current?.GrantPrepared(action, ExecutionConsent.Effect(action));
                 confirmations = Array.Empty<AssistantAction>();
@@ -422,18 +425,18 @@ public partial class App : System.Windows.Application
                 {
                     hands.TrackForeground(); localKeyTarget = hands.CaptureInputTarget(); localKeyFocus = await hands.CaptureKeyFocusAsync(localKeyTarget, token);
                     var effect = ExecutionConsent.Effect(parsed.Actions[0], localKeyFocus.Name, localKeyFocus.Context);
-                    var decision = ExecutionConsent.Decide(settings.FreeMode, parsed.Actions[0], false, effect, RemoteExecution.Current != null);
+                    var decision = ExecutionConsent.Decide(settings, parsed.Actions[0], false, effect, RemoteExecution.Current != null);
                     if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("이 키 입력은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
                     approved = decision == ConsentDecision.Run || ActionApprovalWindow.Confirm(window, $"대상: {target}\n\n{AgentRun.Describe(parsed.Actions[0])}\n키를 받을 항목: {localKeyFocus.Name}", token);
                     if (approved && decision == ConsentDecision.Ask) confirmedEffects[parsed.Actions[0]] = effect;
                     if (approved) RemoteExecution.Current?.GrantPrepared(parsed.Actions[0], effect);
                 }
-                else if (settings.FreeMode && parsed.Actions.Count == 1 && parsed.Actions[0].Kind == "tap")
+                else if ((settings.FreeMode || settings.ConfirmDelegate != "always") && parsed.Actions.Count == 1 && parsed.Actions[0].Kind == "tap")
                 {
                     hands.TrackForeground(); localKeyTarget = hands.CaptureInputTarget();
                     var controls = new DesktopControls(hands.DesktopControlDriver(localKeyTarget));
                     localButton = await controls.PrepareButtonAsync(parsed.Actions[0], token);
-                    var decision = ExecutionConsent.Decide(true, parsed.Actions[0], false, localButton.Effect, RemoteExecution.Current != null);
+                    var decision = ExecutionConsent.Decide(settings, parsed.Actions[0], false, localButton.Effect, RemoteExecution.Current != null);
                     if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("이 버튼은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
                     approved = decision == ConsentDecision.Run || ActionApprovalWindow.Confirm(window, controls.Describe(new("press_control", localButton.Id)), token);
                     if (approved && decision == ConsentDecision.Ask) confirmedEffects[parsed.Actions[0]] = localButton.Effect;
@@ -572,6 +575,8 @@ public partial class App : System.Windows.Application
             case "delegate":case "delegate_codex":
                 if (string.IsNullOrWhiteSpace(settings.ProjectDirectory) || !Directory.Exists(settings.ProjectDirectory)) throw new InvalidOperationException("설정에서 코딩 도우미가 작업할 프로젝트 폴더를 먼저 선택하세요.");
                 var binary = (action.Kind=="delegate_codex"?Brain.CodexBinary():Brain.ClaudeBinary()) ?? throw new InvalidOperationException("선택한 코딩 도우미가 설치되어 있지 않아요.");
+                if (settings.PreviewBeforeSend && !await ConfirmSendPreviewAsync($"코딩 도우미: {(action.Kind == "delegate_codex" ? "Codex" : "Claude Code")}\n프로젝트: {settings.ProjectDirectory}\n\n{action.Value}", token)) throw new AgentStoppedException("전송 미리 보기를 취소했어요. 작업 창을 열지 않았어요.");
+                token.ThrowIfCancellationRequested();
                 var info = new ProcessStartInfo(binary) { UseShellExecute = true, WorkingDirectory = settings.ProjectDirectory }; info.ArgumentList.Add(action.Value); Process.Start(info); break;
         }
         return null;
@@ -677,6 +682,7 @@ public partial class App : System.Windows.Application
         if (closing) return;
         if (starting) { window.SetStatus(microphoneRecoveryPending || automaticSpeechStart ? "마이크 다시 연결 중" : "마이크 준비 중", "한국어 모델을 불러오고 있어요. ‘듣기 중지’로 취소할 수 있어요.", true, true); return; }
         if(speaking){window.SetStatus("답변을 읽는 중",CanListenForBarge ? (bargeIn.Any ? "말씀하시면 답변을 멈추고 들을게요." : "이름을 부르거나 ‘그만’이라고 말해 끼어들 수 있어요.") : "중지 버튼" + (hotkeys?.Stop is { } stop ? "이나 " + stop.Label : "") + "로 멈출 수 있어요.",listening,true);return;}
+        if (AwaitingSendPreview) { window.SetStatus("전송 전 확인", "20초 안에 네·아니로 답하거나 대화창의 보내기·취소를 선택하세요.", listening, true); return; }
         if (busy) { window.SetStatus("처리 중", "중지하거나 새 명령을 입력할 수 있어요.", listening, true); return; }
         if (listening && microphonePause.Blocked) { window.SetStatus(microphonePause.Known ? "다른 앱 사용 중 · 자동 듣기 대기" : "자동 듣기 대기", microphonePause.Detail(HotkeyLabel), true, false, paused: true); return; }
         if (dictating) { window.SetStatus("받아쓰는 중", "입력할 창을 선택하고 말하세요. ‘그만’으로 끝냅니다.", listening, true); return; }

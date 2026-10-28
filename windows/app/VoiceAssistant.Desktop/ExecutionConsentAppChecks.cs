@@ -93,7 +93,7 @@ public partial class App
                 Require(!listening && !starting && input.ProcessId == 0 && PresentationSource.FromVisual(window) == null && PresentationSource.FromVisual(overlay) == null, "Fixture opened input or a native window");
             });
         }
-        finally { CancelExecutionOffer(); StopInput(); StopTurn(); overlay.Close(); window.Close(); }
+        finally { failed += await RunSendPreviewAppChecksAsync(rows); CancelExecutionOffer(); StopInput(); StopTurn(); overlay.Close(); window.Close(); }
         var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "execution-consent-app-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
         File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, visibleWindows = false, microphoneCapture = false, speakerPlayback = false, checks = rows }, SettingsStore.Json));
         return failed == 0 ? 0 : 1;

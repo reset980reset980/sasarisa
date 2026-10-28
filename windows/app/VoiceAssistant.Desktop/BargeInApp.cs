@@ -15,7 +15,7 @@ public partial class App
     bool speechCapturePending = true, waitingBarge;
     DateTimeOffset speechTailUntil, bargeRequestedAt, bargeInputUntil;
     bool CanListenForBarge => listening && speaking && bargeIn.Active && settings.Activation != "hold" && !microphonePause.Blocked;
-    bool ShouldCaptureSpeech() => listening && (CanListenForBarge || !speaking && !busy &&
+    bool ShouldCaptureSpeech() => listening && (CanListenForBarge || !speaking && (!busy || AwaitingSendPreview) &&
         (settings.Activation == "hold" ? holding : settings.Activation == "voice" || dictating || awakeUntil > DateTimeOffset.Now));
     void VoiceOnUi(int version, Action action)
     {

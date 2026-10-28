@@ -14,6 +14,7 @@ public partial class App
     void StopInput()
     {
         CancelExecutionOffer();
+        CancelSendPreview();
         CancelMultilingualStartup();
         if (settings.Language != "ko") WhisperEngine.Shared.Stop();
         CancelWakeCheck();

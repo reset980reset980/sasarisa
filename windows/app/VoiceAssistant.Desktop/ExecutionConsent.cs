@@ -10,9 +10,20 @@ public enum ConsentDecision { Run, Ask, HoldRemote }
 
 public static class ExecutionConsent
 {
+    internal static FreeModeAnswer ParseAnswer(string text)
+    {
+        var value = text.Trim().Trim('.', '!', '?', '~').Trim().ToLowerInvariant();
+        if (new[] { "응", "네", "예", "그래", "좋아", "오케이", "yes", "yeah", "sure", "ok", "okay" }.Contains(value)) return FreeModeAnswer.Yes;
+        if (new[] { "아니", "아니야", "됐어", "싫어", "no", "nope" }.Contains(value)) return FreeModeAnswer.No;
+        return FreeModeAnswer.None;
+    }
+    public static string ModeLabel(string value) => value switch { "never" => "바로 실행", "brain" => "AI가 작업을 넘길 때 묻기", "always" => "물어보고 실행", _ => throw new ArgumentException("실행 방식을 확인하세요.") };
     public static string Prompt(UiSettings settings, bool remote) =>
+        "실행 방식: " + ModeLabel(settings.ConfirmDelegate) + ". 직접 요청한 위임과 AI가 제안한 위임을 앱이 구분한다. " +
+        (settings.ConfirmDelegate == "never" ? "짧은 요청도 관측한 대상과 직전 작업으로 뜻이 분명하면 다시 묻지 않고 처리한다. " : "뜻이 둘로 갈리면 실행 전에 한 가지 질문으로 확인한다. ") +
         (settings.FreeMode ? "현재 자유 모드다. 관측한 대상의 전송·게시·삭제·위임 등은 앱의 검사 뒤 추가 질문 없이 실행할 수 있다. " : "현재 확인 모드다. 실행 확인이 필요한 도구는 앱에서 사용자 확인을 받는다. ") +
         "결제는 항상 앱에서 확인하며 휴대폰 요청으로는 결제하지 않는다. 대상을 확인할 수 없으면 앱이 확인하거나 실행을 보류한다. 도구 설명의 확인 문구보다 앱의 현재 실행 설정과 실제 도구 결과를 따른다. 확인을 모델이 대신 승인하거나 설정을 변경할 수 없다. 실행하지 않은 동작을 완료했다고 말하지 않는다. " +
+        (settings.PreviewBeforeSend ? "Claude 전송 전 미리 보기가 켜져 있다. 자유 모드라도 초안/내용을 확인하고 사용자가 보내기를 선택해야 전송한다. " : "") +
         (remote ? "이 요청은 휴대폰에서 왔다. PC 확인이 필요하다는 결과 뒤에는 다른 키·화면·위임 도구로 우회하지 않는다." : "");
     static readonly HashSet<string> NavigationLabels = new(new[]
     {
@@ -50,11 +61,14 @@ public static class ExecutionConsent
         "tap" or "press_control" or "click" or "key" => observedLabel == null ? ActionEffect.Unknown : LabelEffect(observedLabel, context),
         _ => ActionEffect.None
     };
-    public static ConsentDecision Decide(bool freeMode, AssistantAction action, bool fromAi, ActionEffect effect, bool remote)
+    public static ConsentDecision Decide(bool freeMode, AssistantAction action, bool fromAi, ActionEffect effect, bool remote) => Decide(new UiSettings { FreeMode = freeMode }, action, fromAi, effect, remote);
+    public static ConsentDecision Decide(UiSettings settings, AssistantAction action, bool fromAi, ActionEffect effect, bool remote)
     {
         if (effect == ActionEffect.Payment) return remote ? ConsentDecision.HoldRemote : ConsentDecision.Ask;
         if (!ActionPolicy.NeedsConfirmation(action, fromAi)) return ConsentDecision.Run;
-        if (freeMode && effect != ActionEffect.Unknown) return ConsentDecision.Run;
+        if (remote && settings.PreviewBeforeSend && effect == ActionEffect.Delegate) return ConsentDecision.HoldRemote;
+        if (settings.FreeMode && effect != ActionEffect.Unknown) return ConsentDecision.Run;
+        if (!remote && settings.ConfirmDelegate != "always" && (effect == ActionEffect.None || effect == ActionEffect.Delegate && !fromAi)) return ConsentDecision.Run;
         return remote ? ConsentDecision.HoldRemote : ConsentDecision.Ask;
     }
 }
@@ -77,9 +91,6 @@ internal sealed class FreeModeOffer(Func<DateTimeOffset>? clock = null)
     public FreeModeAnswer Answer(string text, bool remote)
     {
         if (remote || !Pending) { Cancel(); return FreeModeAnswer.None; }
-        var value = text.Trim().Trim('.', '!', '?', '~').Trim().ToLowerInvariant();
-        if (new[] { "응", "네", "예", "그래", "좋아", "오케이", "yes", "yeah", "sure", "ok", "okay" }.Contains(value)) { Cancel(); return FreeModeAnswer.Yes; }
-        if (new[] { "아니", "아니야", "됐어", "싫어", "no", "nope" }.Contains(value)) { Cancel(); return FreeModeAnswer.No; }
-        Cancel(); return FreeModeAnswer.None;
+        var answer = ExecutionConsent.ParseAnswer(text); Cancel(); return answer;
     }
 }

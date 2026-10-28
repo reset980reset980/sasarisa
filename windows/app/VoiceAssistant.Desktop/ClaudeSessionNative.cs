@@ -27,6 +27,7 @@ public sealed partial class WindowsActions
         ForegroundContext? context;
         bool truncated;
         (SelectedClaudeSession Session, string Composer, string EmptyValue)? ready;
+        (SelectedClaudeSession Session, string Composer, string EmptyValue, string Text)? staged;
         static string Key(AutomationElement e) => string.Join(".", e.GetRuntimeId());
         static bool Named(AutomationElement e, params string[] names) => names.Contains(e.Current.Name, StringComparer.OrdinalIgnoreCase);
         static AutomationElement[] Find(AutomationElement root, ControlType type) => root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, type)).Cast<AutomationElement>().ToArray();
@@ -216,6 +217,52 @@ public sealed partial class WindowsActions
             }
             throw new AgentStoppedException("Claude 세션의 입력칸이 아직 준비되지 않았어요. 화면을 확인한 뒤 다시 요청하세요.");
         }, token);
+        void VerifyDraft(SelectedClaudeSession selected, string composerKey, string text, CancellationToken token)
+        {
+            Guard(token); var current = Current(); var composer = Composer(current.Document);
+            if (current.Address != selected.Address || current.Title != selected.Title || Key(composer) != composerKey || Value(composer) != text || Busy(current.Document)) throw new AgentStoppedException("확인 중 Claude 세션·초안·실행 상태가 바뀌어 전송하지 않았어요.");
+        }
+        bool SendDraft(SelectedClaudeSession selected, string composerKey, string text, CancellationToken token)
+        {
+            VerifyDraft(selected, composerKey, text, token); var current = Current();
+            var send = ActiveButtons(current.Document, "보내기", "Send", "Send message");
+            if (send.Length != 1) throw new AgentStoppedException("Claude 보내기 버튼을 확인하지 못했어요. 초안은 입력칸에서 확인하세요.");
+            VerifyDraft(selected, composerKey, text, token); Invoke(send[0], token);
+            for (var attempt = 0; attempt < 40; attempt++)
+            {
+                Guard(token); current = Current();
+                if (current.Address != selected.Address) throw new AgentStoppedException("전송 후 Claude 세션이 바뀌었어요. 결과를 직접 확인하세요. 재전송하지 않습니다.");
+                if (string.IsNullOrWhiteSpace(Value(Composer(current.Document)))) return true;
+                Thread.Sleep(75);
+            }
+            throw new AgentStoppedException("Claude의 전송 접수를 확인하지 못했어요. 결과를 직접 확인하세요. 재전송하지 않습니다.");
+        }
+        public Task StagePreviewAsync(SelectedClaudeSession selected, string text, CancellationToken token) => Run(cancellation =>
+        {
+            var prepared = ready; ready = null;
+            if (staged != null || prepared == null || prepared.Value.Session != selected) throw new AgentStoppedException("확인한 Claude 세션과 달라 초안을 넣지 않았어요.");
+            VerifyDraft(selected, prepared.Value.Composer, prepared.Value.EmptyValue, cancellation);
+            var composer = Composer(Current().Document);
+            staged = (selected, prepared.Value.Composer, prepared.Value.EmptyValue, text);
+            Guard(cancellation); ((ValuePattern)composer.GetCurrentPattern(ValuePattern.Pattern)).SetValue(text);
+            Thread.Sleep(150); VerifyDraft(selected, prepared.Value.Composer, text, cancellation); return true;
+        }, token);
+        public Task SendPreviewAsync(SelectedClaudeSession selected, string text, CancellationToken token) => Run(cancellation =>
+        {
+            var preview = staged; staged = null; // Never replay an uncertain send.
+            if (preview == null || preview.Value.Session != selected || preview.Value.Text != text) throw new AgentStoppedException("미리 본 Claude 초안과 달라 전송하지 않았어요.");
+            return SendDraft(selected, preview.Value.Composer, text, cancellation);
+        }, token);
+        public Task<bool> CancelPreviewAsync(CancellationToken token) => Run(cancellation =>
+        {
+            var preview = staged; staged = null; ready = null;
+            if (preview == null) return true;
+            // Do not activate another app or erase a user's edits during cancellation.
+            cancellation.ThrowIfCancellationRequested(); var current = Current(); var composer = Composer(current.Document);
+            if (current.Address != preview.Value.Session.Address || current.Title != preview.Value.Session.Title || Key(composer) != preview.Value.Composer || Value(composer) != preview.Value.Text) return false;
+            cancellation.ThrowIfCancellationRequested(); ((ValuePattern)composer.GetCurrentPattern(ValuePattern.Pattern)).SetValue(preview.Value.EmptyValue);
+            return Value(composer) == preview.Value.EmptyValue;
+        }, token);
         public async Task SendAsync(SelectedClaudeSession selected, string text, CancellationToken token)
         {
             await Run(cancellation =>
@@ -227,17 +274,7 @@ public sealed partial class WindowsActions
                 Guard(cancellation); ((ValuePattern)composer.GetCurrentPattern(ValuePattern.Pattern)).SetValue(text);
                 Thread.Sleep(150); Guard(cancellation); current = Current();
                 if (current.Address != selected.Address || Key(Composer(current.Document)) != prepared.Value.Composer || Value(composer) != text) throw new AgentStoppedException("Claude 초안이 확인한 내용과 달라 보내지 않았어요. 입력칸을 확인하세요.");
-                var send = ActiveButtons(current.Document, "보내기", "Send", "Send message");
-                if (send.Length != 1 || Busy(current.Document)) throw new AgentStoppedException("Claude 보내기 버튼을 확인하지 못했어요. 초안은 입력칸에서 확인하세요.");
-                Guard(cancellation); Invoke(send[0], cancellation);
-                for (var attempt = 0; attempt < 40; attempt++)
-                {
-                    Guard(cancellation); current = Current();
-                    if (current.Address != selected.Address) throw new AgentStoppedException("전송 후 Claude 세션이 바뀌었어요. 결과를 직접 확인하세요. 재전송하지 않습니다.");
-                    if (string.IsNullOrWhiteSpace(Value(Composer(current.Document)))) return true;
-                    Thread.Sleep(75);
-                }
-                throw new AgentStoppedException("Claude의 전송 접수를 확인하지 못했어요. 결과를 직접 확인하세요. 재전송하지 않습니다.");
+                return SendDraft(selected, prepared.Value.Composer, text, cancellation);
             }, token);
         }
     }

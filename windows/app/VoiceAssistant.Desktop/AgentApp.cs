@@ -52,6 +52,7 @@ public partial class App
         AssistantAction? confirmedKeyAction = null;
         PreparedButton? preparedButton = null;
         (AssistantAction Action, ActionEffect Effect)? approvedEffect = null;
+        string claudePreviewDescription = "";
         DesktopControls? controls = null;
         VisualControls? visual = null;
         WindowsActions.InputTarget? visualTarget = null;
@@ -108,13 +109,14 @@ public partial class App
         async Task<bool> Approve(AssistantAction action, CancellationToken cancellation)
             {
                 RemoteExecution.Guard(action, true, preparing: true);
+                if (requestSettings.PreviewBeforeSend && action.Kind == "delegate_session" && RemoteExecution.Current != null) throw new AgentStoppedException("전송 전 미리 보기는 PC에서 확인해야 해요. 휴대폰에서는 전송하지 않았어요.");
                 await Guard(action);
                 preparedButton = null;
                 approvedEffect = null;
                 bool Consent(string description, ActionEffect effect, VisualPreview? image = null)
                 {
                     cancellation.ThrowIfCancellationRequested();
-                    var decision = ExecutionConsent.Decide(requestSettings.FreeMode, action, true, effect, RemoteExecution.Current != null);
+                    var decision = ExecutionConsent.Decide(requestSettings, action, true, effect, RemoteExecution.Current != null);
                     if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException(effect == ActionEffect.Payment ? "휴대폰에서는 결제를 실행하지 않아요. PC에서 확인하세요." : "대상을 확인하지 못해 휴대폰에서 실행하지 않았어요. PC에서 확인하세요.");
                     if (decision == ConsentDecision.Run)
                     {
@@ -136,13 +138,13 @@ public partial class App
                 if (action.Kind == "delegate_session")
                 {
                     overlay.HideOverlay();
-                    var handoff = await claudeSessions.PrepareAsync(action.Target, action.Value, cancellation);
+                    var handoff = await claudeSessions.PrepareAsync(action.Target, action.Value, cancellation); claudePreviewDescription = handoff;
                     bound = null; controls = null; visual = null; browserAnchor = null; context = hands.CaptureForegroundContext();
                     return Consent(handoff, ActionEffect.Delegate);
                 }
                 var description = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Describe(action) : AgentRun.Describe(action);
                 var effect = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Effect(action) : ExecutionConsent.Effect(action);
-                if (action.Kind == "tap" && requestSettings.FreeMode)
+                if (action.Kind == "tap" && (requestSettings.FreeMode || requestSettings.ConfirmDelegate != "always"))
                 {
                     preparedButton = await Controls().PrepareButtonAsync(action, cancellation);
                     effect = preparedButton.Effect; description = preparedButton.Controls.Describe(new("press_control", preparedButton.Id));
@@ -204,7 +206,13 @@ public partial class App
                         return new("Claude에서 선택한 세션으로 이동했어요. 메시지는 보내지 않았어요.", JsonSerializer.Serialize(activeSession));
                     case "delegate_session":
                         overlay.HideOverlay();
-                        var delegated = await claudeSessions.SendAsync(action.Value, cancellation);
+                        SelectedClaudeSession? delegated;
+                        if (requestSettings.PreviewBeforeSend)
+                        {
+                            delegated = await ReviewClaudeDraftAsync(claudeSessions, action.Value, claudePreviewDescription, cancellation);
+                            if (delegated == null) throw new AgentStoppedException("전송 미리 보기를 취소했어요. 비서가 전송을 요청하지 않았어요.");
+                        }
+                        else delegated = await claudeSessions.SendAsync(action.Value, cancellation);
                         actionHistory.Record("Claude 기존 세션에 작업 전달", unavailable: "이미 전달한 요청은 Claude 앱에서 중지하거나 확인하세요.");
                         return new("Claude 세션에 요청을 전달했어요. 작업 완료 여부와 권한 요청은 Claude 앱에서 확인하세요.", JsonSerializer.Serialize(delegated));
                     case "key":

@@ -133,6 +133,35 @@ public partial class App
                 OnSpeech(JsonSerializer.SerializeToElement(new { type = "final", needs_transcription = true, utterance = sequence, wav = Convert.ToBase64String(VoiceChecks.Silence()) }));
                 Require(calls == requests, "Stale utterance replayed");
             });
+            await Check("Primary foreign-language answers retain the busy owning preview and reject uncertain approval", async () =>
+            {
+                Reset(); reply = "yes"; using var owner = new CancellationTokenSource(); turn = owner; busy = true;
+                try
+                {
+                    var before = brainCalls; var confirmation = ConfirmSendPreviewAsync("Fixture preview", owner.Token);
+                    speechCapturePending = false; // Model the worker's capture acknowledgement without opening a device.
+                    probability = .1; await Final().WaitAsync(TimeSpan.FromSeconds(5));
+                    Require(AwaitingSendPreview && busy && turn == owner && brainCalls == before, "Uncertain preview answer acted or released the owning turn");
+                    probability = .99; speechCapturePending = false; await Final().WaitAsync(TimeSpan.FromSeconds(5));
+                    Require(await confirmation.WaitAsync(TimeSpan.FromSeconds(3)) && busy && turn == owner && brainCalls == before, "Verified foreign answer did not finish its own preview");
+                }
+                finally { StopTurn(); }
+            });
+            await Check("Stopping a preview cancels its in-flight primary inference and late foreign approval cannot act", async () =>
+            {
+                Reset(); reply = "yes"; using var owner = new CancellationTokenSource(); turn = owner; busy = true;
+                try
+                {
+                    var confirmation = ConfirmSendPreviewAsync("Fixture preview", owner.Token);
+                    speechCapturePending = false;
+                    entered = new(TaskCreationOptions.RunContinuationsAsynchronously); release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    var before = brainCalls; var inference = Final(); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                    StopTurn(); release.TrySetResult(); await inference.WaitAsync(TimeSpan.FromSeconds(5));
+                    try { Require(!await confirmation, "Stopped preview approved"); } catch (OperationCanceledException) { }
+                    Require(!AwaitingSendPreview && !busy && turn == null && brainCalls == before, "Late foreign approval reached a command");
+                }
+                finally { StopTurn(); }
+            });
             await Check("Actual language section renders offscreen and never creates a presentation source", () =>
             {
                 Reset(); var section = (FrameworkElement)window.FindName("ConversationLanguageSection");

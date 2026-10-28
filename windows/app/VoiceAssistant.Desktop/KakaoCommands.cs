@@ -47,7 +47,7 @@ public partial class App
         var action = new AssistantAction(command.Kind, command.Text, Target: room.Id);
         var description = await chats.PrepareAsync(action, token);
         var effect = ExecutionConsent.Effect(action);
-        var decision = ExecutionConsent.Decide(settings.FreeMode, action, false, effect, RemoteExecution.Current != null);
+        var decision = ExecutionConsent.Decide(settings, action, false, effect, RemoteExecution.Current != null);
         if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("카카오톡 요청은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
         if (decision == ConsentDecision.Ask && !ActionApprovalWindow.Confirm(window, description, token)) return "카카오톡 요청을 취소했어요. 초안과 메시지는 변경하지 않았어요.";
         RemoteExecution.Current?.GrantPrepared(action, effect);

@@ -17,6 +17,9 @@ public interface IClaudeSessionDriver
     Task<SelectedClaudeSession> SelectAsync(ClaudeSession session, CancellationToken token);
     Task<SelectedClaudeSession> PrepareAsync(ClaudeSession session, CancellationToken token);
     Task SendAsync(SelectedClaudeSession selected, string text, CancellationToken token);
+    Task StagePreviewAsync(SelectedClaudeSession selected, string text, CancellationToken token) => Task.FromException(new AgentStoppedException("이 Claude 연결은 초안 미리 보기를 지원하지 않아요."));
+    Task SendPreviewAsync(SelectedClaudeSession selected, string text, CancellationToken token) => Task.FromException(new AgentStoppedException("준비한 초안이 없어 전송하지 않았어요."));
+    Task<bool> CancelPreviewAsync(CancellationToken token) => Task.FromResult(true);
 }
 
 // A request can name only sessions it actually observed. Sending is a separately approved operation.
@@ -37,7 +40,7 @@ public sealed class ClaudeSessions(IClaudeSessionDriver driver, Func<DateTimeOff
     readonly Func<DateTimeOffset> now = clock ?? (() => DateTimeOffset.UtcNow);
     readonly Dictionary<string, ClaudeSession> observed = new(StringComparer.Ordinal);
     DateTimeOffset expires;
-    (SelectedClaudeSession Session, string Text)? prepared;
+    (SelectedClaudeSession Session, string Text, bool Preview)? prepared;
     public async Task<ClaudeSessionPage> ListAsync(string query, int offset, CancellationToken token)
     {
         observed.Clear(); prepared = null;
@@ -60,7 +63,7 @@ public sealed class ClaudeSessions(IClaudeSessionDriver driver, Func<DateTimeOff
         prepared = null;
         if (string.IsNullOrWhiteSpace(text) || text.Length > 6000) throw new ArgumentException("맡길 작업은 1~6,000자로 입력하세요.");
         var selected = await driver.PrepareAsync(Find(id), token); token.ThrowIfCancellationRequested();
-        prepared = (selected, text);
+        prepared = (selected, text, false);
         return $"Claude Code · {selected.Project} / {selected.Title}\n\n이 세션에 다음 작업을 보냅니다:\n{text}\n\n이후 작업과 권한 요청은 Claude 앱에서 확인하세요.";
     }
     public async Task<SelectedClaudeSession> SendAsync(string text, CancellationToken token)
@@ -69,7 +72,18 @@ public sealed class ClaudeSessions(IClaudeSessionDriver driver, Func<DateTimeOff
         prepared = null; observed.Clear(); // Consume before any side effect; never replay a send.
         token.ThrowIfCancellationRequested();
         if (text != item.Text) throw new AgentStoppedException("확인한 작업 내용과 달라 전송하지 않았어요.");
-        await driver.SendAsync(item.Session, text, token);
+        if (item.Preview) await driver.SendPreviewAsync(item.Session, text, token);
+        else await driver.SendAsync(item.Session, text, token);
         return item.Session;
     }
+    public async Task StagePreviewAsync(string text, CancellationToken token)
+    {
+        var item = prepared ?? throw new AgentStoppedException("먼저 Claude 세션과 내용을 준비하세요."); prepared = null;
+        token.ThrowIfCancellationRequested();
+        if (item.Text != text || item.Preview) throw new AgentStoppedException("확인한 초안과 달라 입력하지 않았어요.");
+        await driver.StagePreviewAsync(item.Session, text, token); token.ThrowIfCancellationRequested();
+        prepared = (item.Session, item.Text, true);
+    }
+    public async Task<bool> CancelPreviewAsync(CancellationToken token)
+    { prepared = null; observed.Clear(); return await driver.CancelPreviewAsync(token); }
 }
