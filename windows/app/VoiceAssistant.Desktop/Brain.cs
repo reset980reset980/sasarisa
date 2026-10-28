@@ -78,22 +78,35 @@ public sealed partial class Brain
         "\n</execution_observations_json>\n";
     static string Clip(string text, int max) => text.Length <= max ? text : text[..max] + "… (생략됨)";
     public void RememberTurn(string text, string reply) { recent.Add((text, reply)); if (recent.Count > 3) recent.RemoveAt(0); }
-    static async Task<CommandPlan> ClaudeAsync(string prompt, UiSettings s, CancellationToken token, McpEndpoint? mcp = null)
+    internal static ProcessStartInfo ClaudeInfo(string binary, UiSettings s, McpEndpoint? mcp = null)
     {
-        var binary = ClaudeBinary() ?? throw new InvalidOperationException("Claude Code가 없어요. 설치·로그인 후 다시 시도하세요.");
         var info = new ProcessStartInfo(binary) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.Combine(AppPaths.Home, "work") };
-        foreach (var arg in new[] { "-p", "--restricted", "--tools", "", "--strict-mcp-config", "--mcp-config", mcp?.ClaudeConfig ?? "{\"mcpServers\":{}}", "--disable-slash-commands", "--setting-sources", "", "--no-session-persistence", "--output-format", "json", "--json-schema", Schema }) info.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "-p", "--restricted", "--tools", "", "--strict-mcp-config", "--mcp-config", mcp?.ClaudeConfig ?? "{\"mcpServers\":{}}", "--disable-slash-commands", "--setting-sources", "", "--no-session-persistence", "--output-format", "stream-json", "--verbose", "--json-schema", Schema }) info.ArgumentList.Add(arg);
         if (mcp != null) { info.ArgumentList.Add("--allowedTools"); info.ArgumentList.Add("mcp__sasarisa__*"); }
         if (!string.IsNullOrWhiteSpace(s.BrainModel)) { info.ArgumentList.Add("--model"); info.ArgumentList.Add(s.BrainModel); }
         info.Environment.Remove("CLAUDECODE"); info.Environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1";
+        return info;
+    }
+    internal static async Task<CommandPlan> ClaudeAsync(string prompt, UiSettings s, CancellationToken token, McpEndpoint? mcp = null)
+    {
+        var binary = ClaudeBinary() ?? throw new InvalidOperationException("Claude Code가 없어요. 설치·로그인 후 다시 시도하세요.");
+        var info = ClaudeInfo(binary, s, mcp);
+        using var usage = new AiUsageAttempt("claude", cancellation: token);
         using var p = new Process { StartInfo = info }; p.Start();
-        var stdout = p.StandardOutput.ReadToEndAsync(); var stderr = p.StandardError.ReadToEndAsync();
+        var stdout = ClaudeUsageEvents.ReadAsync(p.StandardOutput, usage); var stderr = p.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(120));
-        try { await p.StandardInput.WriteAsync(prompt.AsMemory(), timeout.Token); p.StandardInput.Close(); await p.WaitForExitAsync(timeout.Token); } catch { if (!p.HasExited) p.Kill(true); throw; }
+        try { await p.StandardInput.WriteAsync(prompt.AsMemory(), timeout.Token); p.StandardInput.Close(); await p.WaitForExitAsync(timeout.Token); }
+        catch
+        {
+            if (token.IsCancellationRequested) usage.Canceled(); if (!p.HasExited) p.Kill(true);
+            try { await p.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)); await stdout.WaitAsync(TimeSpan.FromMilliseconds(300)); } catch (Exception ex) when (ex is TimeoutException or IOException or ObjectDisposedException) { }
+            throw;
+        }
         var output = await stdout; var error = await stderr;
-        if (p.ExitCode != 0) throw new InvalidOperationException("Claude 연결 실패: " + Short(error.Length > 0 ? error : output));
-        using var d = JsonDocument.Parse(output); var root = d.RootElement;
+        if (p.ExitCode != 0) throw new InvalidOperationException("Claude 연결 실패: " + Short(error.Length > 0 ? error : "응답을 완료하지 못했어요."));
+        if (output == null) throw new InvalidOperationException("Claude 응답을 읽지 못했어요."); var root = output.Value;
         if (root.TryGetProperty("is_error", out var isError) && isError.ValueKind == JsonValueKind.True) throw new InvalidOperationException("Claude: " + Short(root.GetProperty("result").GetString() ?? "응답 오류"));
+        usage.Complete();
         if (root.TryGetProperty("structured_output", out var plan)) return Decode(plan);
         if (root.TryGetProperty("result", out var result))
         {
@@ -117,8 +130,14 @@ public sealed partial class Brain
         }
         using var schema = JsonDocument.Parse(Schema);
         var body = JsonSerializer.Serialize(new { model, stream = false, format = schema.RootElement, messages = new[] { new { role = "user", content = prompt } }, options = new { temperature = 0.2 } });
-        using var res = await client.PostAsync(root + "/api/chat", new StringContent(body, Encoding.UTF8, "application/json"), token); res.EnsureSuccessStatusCode();
-        using var d = JsonDocument.Parse(await res.Content.ReadAsStringAsync(token)); using var plan = JsonDocument.Parse(d.RootElement.GetProperty("message").GetProperty("content").GetString()!); return Decode(plan.RootElement);
+        using var usage = new AiUsageAttempt("ollama");
+        try
+        {
+            using var res = await client.PostAsync(root + "/api/chat", new StringContent(body, Encoding.UTF8, "application/json"), token); res.EnsureSuccessStatusCode();
+            using var d = JsonDocument.Parse(await res.Content.ReadAsStringAsync(token)); usage.ObserveApi(d.RootElement); usage.Complete();
+            using var plan = JsonDocument.Parse(d.RootElement.GetProperty("message").GetProperty("content").GetString()!); return Decode(plan.RootElement);
+        }
+        catch (OperationCanceledException) { usage.Canceled(); throw; }
     }
     internal static CommandPlan Decode(JsonElement root)
     {

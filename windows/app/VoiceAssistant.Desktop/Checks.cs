@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--ai-usage-only") || args.Contains("--ai-usage-native"))
+        {
+            failed = await AiUsageChecks.RunAsync(rows, args.Contains("--ai-usage-native"));
+            var report = Path.Combine(AppPaths.Home, "ai-usage-checks.json"); Directory.CreateDirectory(AppPaths.Home);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count(x => JsonSerializer.SerializeToElement(x).TryGetProperty("pass", out _)), failed, microphoneCapture = false, speakerPlayback = false, visibleWindows = false, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--personal-data-only"))
         {
             failed = PersonalDataChecks.Run(rows);
@@ -373,6 +379,7 @@ public static class Checks
         failed += NameLearningChecks.Run(rows);
         failed += EnglishCommandChecks.Run(rows);
         failed += PersonalDataChecks.Run(rows);
+        failed += await AiUsageChecks.RunAsync(rows);
         failed += ListeningStateChecks.Run(rows);
         failed += VocabularyChecks.Run(rows);
         failed += await BargeInChecks.RunAsync(rows, args.Contains("--devices"));

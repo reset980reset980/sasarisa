@@ -204,6 +204,7 @@
                                 <Button Content="선택한 브라우저에서 유튜브 로그인 확인" Style="{StaticResource SecondaryButton}" Padding="12,7" HorizontalAlignment="Left" Margin="0,8,0,8" Click="YouTubeLogin_Click" />
                                 <TextBlock x:Name="YouTubeFeedback" Style="{StaticResource HelpText}" Margin="0,0,0,20" Text="자비스가 새로 연 영상 창에서만 재생·정지를 제어합니다. 시간 이동은 브라우저에서 직접 해 주세요. 로그인 화면이나 다른 탭으로 바뀌면 조작을 멈춥니다." />
                                 <TextBlock Text="생각하고 답하기" FontSize="17" FontWeight="SemiBold" /><TextBlock Text="앱 실행과 타이머는 바로 처리하고, 질문은 선택한 AI에 연결합니다." Style="{StaticResource HelpText}" Margin="0,6,0,19" />
+                                <Button x:Name="AiUsageButton" Content="AI 사용량 · 한도와 7일 기록" Click="AiUsage_Click" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="12,8" Margin="0,0,0,18" />
                                 <StackPanel x:Name="ExecutionConsentSection" Margin="0,0,0,18">
                                     <TextBlock Text="실행 방식" Style="{StaticResource FieldLabel}" />
                                     <ComboBox x:Name="ConfirmDelegateInput" SelectedIndex="2" AutomationProperties.Name="실행 방식" Margin="0,5,0,7"><ComboBoxItem Content="바로 실행" Tag="never" /><ComboBoxItem Content="AI가 작업을 넘길 때 묻기" Tag="brain" /><ComboBoxItem Content="물어보고 실행 · 기존 Windows 기본값" Tag="always" /></ComboBox>

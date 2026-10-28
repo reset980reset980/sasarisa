@@ -52,15 +52,19 @@ public sealed partial class Brain
         try
         {
             var info = CodexInfo(binary, schemaFile, settings); mcp?.ConfigureCodex(info);
+            using var usage = new AiUsageAttempt("codex");
             using var process = new Process { StartInfo = info };
-            var (stdout, stderr) = await RunCodexProcessAsync(process, prompt, token);
+            string stdout, stderr;
+            try { (stdout, stderr) = await RunCodexProcessAsync(process, prompt, token, observe: stream => ClaudeUsageEvents.Codex(stream, usage)); }
+            catch (OperationCanceledException) { usage.Canceled(); throw; }
             if (process.ExitCode != 0) throw new InvalidOperationException("Codex 연결 실패: " + Short(stderr.Length > 0 ? stderr : stdout));
+            usage.Complete();
             return DecodeCodexEvents(stdout);
         }
         finally { if (File.Exists(schemaFile)) File.Delete(schemaFile); }
     }
 
-    internal static async Task<(string Output, string Error)> RunCodexProcessAsync(Process process, string prompt, CancellationToken token, TimeSpan? responseLimit = null)
+    internal static async Task<(string Output, string Error)> RunCodexProcessAsync(Process process, string prompt, CancellationToken token, TimeSpan? responseLimit = null, Action<string>? observe = null)
     {
         token.ThrowIfCancellationRequested(); process.Start();
         var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
@@ -71,12 +75,13 @@ public sealed partial class Brain
             catch (Exception ex) when ((ex is InvalidOperationException or System.ComponentModel.Win32Exception) && process.HasExited) { }
             await process.WaitForExitAsync();
             try { await Task.WhenAll(output, error); } catch (IOException) { }
+            if (output.IsCompletedSuccessfully) observe?.Invoke(output.Result);
         }
         try
         {
             await process.StandardInput.WriteAsync(prompt.AsMemory(), timeout.Token); process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token);
-            return (await output, await error);
+            var text = await output; observe?.Invoke(text); return (text, await error);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         {

@@ -85,6 +85,8 @@ public partial class MainWindow : Window
     public event Action<UiSettings>? GreetingPreviewRequested;
     public event Action? SetupRequested;
     public event Action? PersonalRequested;
+    public event Action? AiUsageRequested;
+    void AiUsage_Click(object sender, RoutedEventArgs e) => AiUsageRequested?.Invoke();
     public event Action<string, DeviceOption>? NameTrainingRequested;
     public event Action? RefreshDevicesRequested;
     public event Action? QuitRequested;

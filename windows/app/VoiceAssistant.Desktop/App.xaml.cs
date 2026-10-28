@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--ai-usage-app-only")) { Shutdown(await AiUsageAppChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--personal-data-app-only")) { Shutdown(PersonalDataAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--execution-consent-app-only")) { Shutdown(await RunExecutionConsentAppChecksAsync()); return; }
@@ -108,6 +109,7 @@ public partial class App : System.Windows.Application
         window.GreetingPreviewRequested += preview => { StopTurn(); ShowGreeting(preview); _ = SayAsync(Greetings.Reply(preview), CancellationToken.None, true, preview); };
         window.SetupRequested += ShowSetup;
         window.PersonalRequested += ShowPersonal;
+        window.AiUsageRequested += () => new AiUsageWindow(AiUsageStore.Shared, settings.Name, settings.Language) { Owner = window }.ShowDialog();
         window.NameTrainingRequested += ShowNameTraining;
         window.SettingsFileRequested += WithInputPaused;
         window.Closing += OnWindowClosing;

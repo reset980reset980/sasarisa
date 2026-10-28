@@ -37,10 +37,12 @@ public sealed partial class Brain
         if (body != null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
         return request;
     }
-    static async Task<JsonDocument> ApiResponse(HttpClient client, HttpRequestMessage request, CancellationToken token)
+    static async Task<JsonDocument> ApiResponse(HttpClient client, HttpRequestMessage request, CancellationToken token, string? usageProvider = null)
     {
+        using var usage = usageProvider == null ? null : new AiUsageAttempt(usageProvider, cancellation: token);
         HttpResponseMessage response;
         try { response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token); }
+        catch (OperationCanceledException) { usage?.Canceled(); throw; }
         catch (HttpRequestException) { throw new InvalidOperationException("AI 서버에 연결하지 못했어요. 서버 실행 상태와 주소, 네트워크를 확인하세요."); }
         using var responseLifetime = response;
         if (!response.IsSuccessStatusCode)
@@ -68,7 +70,7 @@ public sealed partial class Brain
             if (buffer.Length + length > limit) throw new InvalidOperationException("AI 응답이 너무 커요.");
             buffer.Write(bytes, 0, length);
         }
-        try { return JsonDocument.Parse(buffer.ToArray()); }
+        try { var document = JsonDocument.Parse(buffer.ToArray()); usage?.ObserveApi(document.RootElement); usage?.Complete(); return document; }
         catch (JsonException) { throw new InvalidOperationException("서버가 올바른 JSON 응답을 보내지 않았어요."); }
     }
     public static async Task<IReadOnlyList<string>> ModelsAsync(UiSettings settings, CancellationToken token, string? keyOverride = null, HttpClient? transport = null)
@@ -115,7 +117,7 @@ public sealed partial class Brain
             tool_choice = new { type = "function", function = new { name = "assistant_plan" } }
         };
         using var request = ApiRequest(settings, anthropic ? "messages" : responses ? "responses" : "chat/completions", key, body);
-        using var document = await ApiResponse(transport ?? owned!, request, token);
+        using var document = await ApiResponse(transport ?? owned!, request, token, settings.BrainProvider);
         try { return DecodeApi(document.RootElement, anthropic, responses); }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or OverflowException or IndexOutOfRangeException)
         { throw new InvalidOperationException("AI 응답의 작업 계획을 확인할 수 없어 실행하지 않았어요. 함수 호출을 지원하는 대화 모델을 선택하세요."); }

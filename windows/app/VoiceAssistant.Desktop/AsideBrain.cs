@@ -180,6 +180,7 @@ internal sealed class AsideClient
             var activeSession = continuation;
             session = scope = null;
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(token); limit.CancelAfter(timeout ?? TimeSpan.FromMinutes(6));
+            using var usage = new AiUsageAttempt("aside");
             progress?.Invoke("Aside가 작업을 시작하고 있어요.");
             AsideProcessResult result;
             try
@@ -193,6 +194,7 @@ internal sealed class AsideClient
             }
             catch
             {
+                if (limit.IsCancellationRequested) usage.Canceled();
                 if (activeSession != null) await StopSessionAsync(exe, account, activeSession, notice, remote);
                 else if (limit.IsCancellationRequested) notice?.Invoke("Aside 연결은 멈췄어요. 세션 번호를 받기 전이어서 브라우저 작업의 중지는 확인하지 못했어요. Aside에서도 확인해 주세요.");
                 if (limit.IsCancellationRequested && !token.IsCancellationRequested) throw new TimeoutException("Aside 응답 대기 시간이 지났어요.");
@@ -205,6 +207,7 @@ internal sealed class AsideClient
             { if (activeSession != null) await StopSessionAsync(exe, account, activeSession, notice, remote); throw new InvalidOperationException("Aside가 답변을 돌려주지 않았어요. Aside에서 작업 상태를 확인하세요."); }
             if (!textOnly && Volatile.Read(ref generation) == ownGeneration)
             { session = activeSession; scope = nextScope; lastUse = now(); }
+            usage.Complete();
             return answer;
         }
         finally { gate.Release(); }

@@ -33,7 +33,7 @@ public sealed partial class Brain
         {
             token.ThrowIfCancellationRequested();
             using var request = ApiRequest(connection, conversation.Route, key, conversation.Request(model));
-            using var document = await ApiResponse(client, request, token);
+            using var document = await ApiResponse(client, request, token, settings.BrainProvider);
             var turn = conversation.Accept(document.RootElement); token.ThrowIfCancellationRequested();
             if (turn.Calls.Count == 0) return new(turn.Text, Array.Empty<AssistantAction>());
             var results = new List<(ApiToolCall, McpReply)>(); var failed = false;
