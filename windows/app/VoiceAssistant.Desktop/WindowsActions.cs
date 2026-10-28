@@ -122,6 +122,7 @@ public sealed partial class WindowsActions
         if (!selection.Element.TryGetCurrentPattern(TextPattern.Pattern, out var pattern)) throw new InvalidOperationException("원래 선택 영역이 사라졌어요.");
         var current = string.Join("", ((TextPattern)pattern).GetSelection().Select(x => x.GetText(6001)));
         if (current != selection.Text) throw new InvalidOperationException("선택한 글이 바뀌어 적용하지 않았어요. 다시 선택해 주세요.");
+        if (selection.Element.Current.ControlType == ControlType.Edit && !Automation.Compare(AutomationElement.FocusedElement, selection.Element)) throw new AgentStoppedException("선택한 입력칸의 포커스가 바뀌어 적용하지 않았어요.");
         await TypeAsync(revised, token);
     }
     public async Task TypeAsync(string text, CancellationToken token = default, InputTarget? expected = null)
@@ -129,7 +130,36 @@ public sealed partial class WindowsActions
         if (expected != null) RequireInputTarget(expected);
         var selected = await Focus(token);
         if (expected != null) RequireInputTarget(expected);
-        for (var offset = 0; offset < text.Length; offset += 64) { token.ThrowIfCancellationRequested(); if (Native.GetForegroundWindow() != selected) throw new InvalidOperationException("입력 창이 바뀌어 멈췄어요."); Native.Type(text.Substring(offset, Math.Min(64, text.Length - offset))); await Task.Yield(); }
+        var bound = expected ?? CaptureInputTarget(); var element = AutomationElement.FocusedElement;
+        var before = CaptureEdit(element);
+        var normalized = FieldInsertion.Normalize(text);
+        var tracked = before != null && before.State.Text.Length - before.State.Length + normalized.Length <= 6000;
+        FieldEditState Read()
+        {
+            token.ThrowIfCancellationRequested(); RequireInputTarget(bound);
+            if (Native.GetForegroundWindow() != selected || !Automation.Compare(AutomationElement.FocusedElement, element)) throw new AgentStoppedException("입력 위치가 바뀌어 멈췄어요.");
+            return CaptureEdit(element)?.State ?? throw new AgentStoppedException("입력칸을 더 이상 확인할 수 없어요.");
+        }
+        await TrackEditAsync("문서에 글 입력", bound, element, tracked ? before!.State.Apply(normalized).Text : "", async () =>
+        {
+            if (tracked)
+            {
+                await FieldInsertion.RunAsync(before!.State, normalized, Read, part =>
+                {
+                    if (new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(Native.KeyDown)) throw new AgentStoppedException("보조 키가 눌려 있어 글 입력을 멈췄어요.");
+                    Native.Type(part);
+                }, token);
+            }
+            else for (var offset = 0; offset < text.Length;)
+            {
+                token.ThrowIfCancellationRequested(); RequireInputTarget(bound);
+                var focused = AutomationElement.FocusedElement;
+                if (Native.GetForegroundWindow() != selected || focused == null || focused.Current.IsPassword || !Automation.Compare(focused, element)) throw new AgentStoppedException("입력 위치가 바뀌어 멈췄어요.");
+                var count = Math.Min(64, text.Length - offset);
+                if (offset + count < text.Length && char.IsHighSurrogate(text[offset + count - 1]) && char.IsLowSurrogate(text[offset + count])) count--;
+                Native.Type(text.Substring(offset, count)); offset += count; await Task.Yield();
+            }
+        }, token);
     }
     public async Task BrowserAsync(string operation, CancellationToken token = default, InputTarget? expected = null)
     {

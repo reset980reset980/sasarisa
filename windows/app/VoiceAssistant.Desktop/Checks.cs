@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--text-undo-only"))
+        {
+            failed = await TextEditUndoChecks.RunAsync(rows);
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "text-undo-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--whisper-prerequisites-only"))
         {
             failed = await WhisperPrerequisiteChecks.RunAsync(rows, args.Contains("--whisper-prerequisites-native"));
@@ -316,6 +322,7 @@ public static class Checks
         failed += await McpChecks.RunAsync(rows, args.Contains("--ai"), args.Contains("--codex"));
         failed += await VisualChecks.RunAsync(rows, args.Contains("--ai"), args.Contains("--codex"));
         failed += await InsertionChecks.RunAsync(rows, args.Contains("--ai"), args.Contains("--codex"));
+        failed += await TextEditUndoChecks.RunAsync(rows);
         failed += await WindowTargetChecks.RunAsync(rows, args.Contains("--ai"), args.Contains("--codex"));
         failed += await KeyboardChecks.RunAsync(rows, args.Contains("--ai"), args.Contains("--codex"));
         failed += SettingsTransferChecks.Run(rows);

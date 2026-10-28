@@ -84,10 +84,10 @@ internal static class DictationControlChecks
             {
                 var edit = await DictationProcessor.PrepareAsync(phrase, settings, CancellationToken.None);
                 await DictationWriter.ApplyAsync(edit, _ => { effects.Add("approve"); return true; }, (s,_) => { effects.Add("type:" + s); return Task.CompletedTask; }, (s,_) => { effects.Add("key:" + s); return Task.CompletedTask; }, CancellationToken.None,
-                    settle: _ => { effects.Add("settle"); return Task.CompletedTask; });
+                    settle: _ => { effects.Add("settle"); return Task.CompletedTask; }, undo: _ => { effects.Add("undo"); return Task.CompletedTask; });
             }
             await Apply("음 내일 봐요 보내"); await Apply("취소"); await Apply("줄바꿈");
-            Require(effects.SequenceEqual(new[] { "approve", "type:내일 봐요 ", "settle", "key:enter", "key:ctrl+z", "approve", "key:enter" }), "Wrong edit sequence");
+            Require(effects.SequenceEqual(new[] { "approve", "type:내일 봐요 ", "settle", "key:enter", "undo", "approve", "key:enter" }), "Wrong edit sequence");
         });
         await Check("Cancellation or insertion failure prevents trailing Enter and never retries text", async () =>
         {

@@ -47,7 +47,7 @@ public sealed record DictationEdit(DictationUtterance Utterance, DictationResult
     public string Description => Utterance.Control switch
     {
         DictationControl.Enter => "Enter 키를 눌러 줄을 바꾸거나 현재 앱에서 전송합니다.",
-        DictationControl.Undo => "현재 문서에 Ctrl+Z 실행 취소를 요청합니다.",
+        DictationControl.Undo => "마지막 문서 입력의 원문과 선택 위치를 확인해 되돌립니다.",
         DictationControl.Stop => "받아쓰기를 끝냅니다.",
         _ => "입력할 글: " + Result.Text + (Utterance.EnterAfter ? "\n입력 후 Enter 키를 누릅니다." : "")
     };
@@ -56,14 +56,14 @@ public static class DictationWriter
 {
     public static async Task<bool> ApplyAsync(DictationEdit edit, Func<DictationEdit, bool> confirm,
         Func<string, CancellationToken, Task> type, Func<string, CancellationToken, Task> key,
-        CancellationToken token, Action? beforeInput = null, Func<CancellationToken, Task>? settle = null)
+        CancellationToken token, Action? beforeInput = null, Func<CancellationToken, Task>? settle = null, Func<CancellationToken, Task>? undo = null)
     {
         token.ThrowIfCancellationRequested();
         if (edit.Utterance.Control == DictationControl.Stop || edit.Utterance.Control == DictationControl.Text && string.IsNullOrWhiteSpace(edit.Result.Text)) return false;
         // Approval happens before *any* part of a text-and-Enter operation.
         if (edit.NeedsConfirmation && !confirm(edit)) return false;
         token.ThrowIfCancellationRequested(); beforeInput?.Invoke();
-        if (edit.Utterance.Control == DictationControl.Undo) await key("ctrl+z", token);
+        if (edit.Utterance.Control == DictationControl.Undo) await (undo?.Invoke(token) ?? throw new InvalidOperationException("문서 입력 기록을 확인할 수 없어 되돌리지 않았어요."));
         else if (edit.Utterance.Control == DictationControl.Enter) await key("enter", token);
         else
         {

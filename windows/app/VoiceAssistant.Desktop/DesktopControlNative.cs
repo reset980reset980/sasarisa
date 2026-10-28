@@ -36,7 +36,7 @@ public sealed partial class WindowsActions
                 return ((TextPattern)text).DocumentRange.GetAttributeValue(TextPattern.IsReadOnlyAttribute) is bool readOnly && !readOnly;
             return false;
         }
-        static FieldEditState? Selection(AutomationElement element)
+        internal static FieldEditState? Selection(AutomationElement element)
         {
             if (element.Current.IsPassword) throw new AgentStoppedException("암호 입력란은 읽거나 수정하지 않아요.");
             if (!element.TryGetCurrentPattern(TextPattern.Pattern, out var value)) return null;
@@ -57,7 +57,7 @@ public sealed partial class WindowsActions
             try { return Selection(element); }
             catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or ElementNotAvailableException) { return null; }
         }
-        string Context(AutomationElement element)
+        internal string Context(AutomationElement element)
         {
             var labels = new List<string>(); var current = TreeWalker.ControlViewWalker.GetParent(element);
             for (var depth = 0; current != null && depth < 24; depth++, current = TreeWalker.ControlViewWalker.GetParent(current))
@@ -146,12 +146,15 @@ public sealed partial class WindowsActions
                 var focused = AutomationElement.FocusedElement;
                 if (Native.GetForegroundWindow() != expected.Window || focused == null || focused.Current.IsPassword || !Automation.Compare(focused, element)) throw new AgentStoppedException("입력칸이 바뀌어 글 입력을 멈췄어요.");
             }
+            await owner.TrackEditAsync("조회한 입력칸의 글 교체", expected, element, text, async () =>
+            {
             GuardField(); Native.Press(0x41, 0x11); // Select only the explicitly observed field.
             if (text.Length == 0) { GuardField(); Native.Press(0x08); }
             for (var offset = 0; offset < text.Length; offset += 64) { GuardField(); Native.Type(text.Substring(offset, Math.Min(64, text.Length - offset))); await Task.Yield(); }
             await Task.Delay(100, token); GuardField();
             var actual = Text(element)?.Replace("\r\n", "\n").TrimEnd('\r');
             if (actual != text.Replace("\r\n", "\n").TrimEnd('\r')) throw new InvalidOperationException("입력은 전달했지만 입력칸의 최종 내용이 일치하지 않아요. 화면을 확인하세요.");
+            }, token);
         }, token);
         public Task InsertAsync(DesktopControl control, string text, CancellationToken token) => Task.Run(async () =>
         {
@@ -168,11 +171,12 @@ public sealed partial class WindowsActions
                 if (!Editable(element)) throw new AgentStoppedException("입력칸이 읽기 전용으로 바뀌었어요.");
                 return Selection(element) ?? throw new AgentStoppedException("입력칸의 선택 영역을 더 이상 확인할 수 없어요.");
             }
-            await FieldInsertion.RunAsync(before, text, Read, part =>
+            await owner.TrackEditAsync("조회한 입력칸에 글 추가", expected, element, before.Apply(FieldInsertion.Normalize(text)).Text,
+                () => FieldInsertion.RunAsync(before, text, Read, part =>
             {
                 if (new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(Native.KeyDown)) throw new AgentStoppedException("보조 키가 눌려 있어 글 추가를 멈췄어요.");
                 Native.Type(part);
-            }, token);
+            }, token), token);
         }, token);
     }
 }

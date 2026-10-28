@@ -217,12 +217,10 @@ public partial class App
                     case "fill_field":
                         try { await Controls().FillAsync(action.Target, action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 입력칸 글 교체 요청", unavailable: "글의 일부가 입력됐을 수 있어요. 대상 입력칸을 확인하세요."); throw; }
-                        actionHistory.Record("조회한 입력칸의 글 교체", unavailable: "해당 문서에서 직접 Ctrl+Z를 사용할 수 있어요.");
                         return new("선택한 입력칸의 내용이 요청한 글과 일치하는 것을 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length }));
                     case "insert_field":
                         try { await Controls().InsertAsync(action.Target, action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 입력칸 글 추가 요청", unavailable: "글의 일부가 입력됐을 수 있어요. 대상 입력칸을 확인하세요."); throw; }
-                        actionHistory.Record("조회한 입력칸에 글 추가", unavailable: "해당 문서에서 직접 Ctrl+Z를 사용할 수 있어요.");
                         return new("선택한 입력칸에 글을 넣고 나머지 내용과 최종 커서 위치를 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length }));
                     case "list_timers":
                         var list = timers.Items.OrderBy(x => x.Due).ToArray();
