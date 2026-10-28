@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -70,6 +71,54 @@ internal static class WhisperChecks
             const string live = "블렌더를 열어 줘";
             foreach (var other in new[] { "Thanks for watching", "시청해 주셔서 감사합니다.", "I like coffee and the weather.", "전국의 감염병 통계를 자세하게 설명해드리겠습니다", "- 메모장을 닫아 - 계산기를 켜" }) Require(WhisperText.Select(live, other) == live, "Unrelated text accepted: " + other);
             Require(WhisperText.Select(live, "블렌더를 열어 줘 고팩 고팩 고팩") == live, "Repeated noise kept");
+            return Task.CompletedTask;
+        });
+        await Check("Whisper verbose tokens join Korean pieces and keep the least certain piece", () =>
+        {
+            using var json = JsonDocument.Parse("""
+                {"text":"  블렌더 삼십 분 타이머  ","segments":[{"words":[
+                {"word":" 블","probability":0.9},{"word":"렌","probability":0.2},{"word":"더","probability":0.8},
+                {"word":" 삼","probability":0.7},{"word":"십","probability":0.6}]},
+                {"words":[{"word":" 분","probability":0.9},{"word":" 타이머","probability":1}]}]}
+                """);
+            var transcript = WhisperTranscript.Parse(json.RootElement);
+            Require(transcript.Text == "블렌더 삼십 분 타이머" && transcript.Words.Count == 4, "Text or word boundaries lost");
+            Require(transcript.Words[0] == new WhisperWord("블렌더", 0.2) && transcript.Words[1] == new WhisperWord("삼십", 0.6), "Uncertain suffix ignored");
+            using var legacy = JsonDocument.Parse("{\"text\":\"문장\"}");
+            Require(WhisperTranscript.Parse(legacy.RootElement).Words.Count == 0, "Text-only reply invented certainty");
+            return Task.CompletedTask;
+        });
+        await Check("Whisper malformed confidence and oversized transcripts cannot override live speech", () =>
+        {
+            foreach (var probability in new[] { "-0.1", "1.1", "1e400", "null", "\"0.2\"" })
+            {
+                using var json = JsonDocument.Parse("{\"text\":\"삼십 분 타이머\",\"segments\":[{\"words\":[{\"word\":\" 삼십\",\"probability\":" + probability + "}]}]}");
+                try { WhisperTranscript.Parse(json.RootElement); throw new Exception("Malformed confidence accepted: " + probability); } catch (JsonException) { }
+            }
+            foreach (var raw in new[] { "{}", "{\"text\":12}", "{\"text\":\"말\",\"segments\":{}}", "{\"text\":\"말\",\"segments\":[null]}", "{\"text\":\"말\",\"segments\":[{\"words\":[{\"word\":\"말\"}]}]}", JsonSerializer.Serialize(new { text = new string('가', 6001) }) })
+            {
+                using var json = JsonDocument.Parse(raw);
+                try { WhisperTranscript.Parse(json.RootElement); throw new Exception("Invalid transcript accepted"); } catch (JsonException) { }
+            }
+            return Task.CompletedTask;
+        });
+        await Check("Whisper uncertain novel words fall back while supported words and boundary confidence survive", () =>
+        {
+            const string live = "블렌다 삼십 분 타이머"; const string corrected = "블렌더 삼십 분 타이머";
+            Require(WhisperText.Select(live, corrected, new[] { new WhisperWord("블렌더", 0.34) }) == live, "Uncertain correction accepted");
+            Require(WhisperText.Select(live, corrected, new[] { new WhisperWord("블렌더", 0.35) }) == corrected, "Confidence boundary changed");
+            Require(WhisperText.Select(live, corrected, new[] { new WhisperWord("삼십", 0.01) }) == corrected, "Corroborated word rejected");
+            Require(WhisperText.Select("chrome 삼십 분 타이머", "크롬 삼십 분 타이머", new[] { new WhisperWord("크롬", 0.01) }) == "크롬 삼십 분 타이머", "Latin/Hangul corroboration lost");
+            Require(WhisperText.Select("삼십 분", "삼십 분 타이머 시작해", new[] { new WhisperWord("시작해", 0.01) }) == "삼십 분 타이머 시작해", "Short live fragment vetoed longer related speech");
+            return Task.CompletedTask;
+        });
+        await Check("Whisper discarded noise and removed wake words do not veto retained corrections", () =>
+        {
+            const string live = "블렌다 삼십 분 타이머"; const string corrected = "블렌더 삼십 분 타이머";
+            var words = new[] { new WhisperWord("고팩", 0.01), new WhisperWord("자비스", 0.01) };
+            Require(WhisperText.Select(live, corrected + " 고팩 고팩 고팩", words) == corrected, "Dropped noise vetoed correction");
+            Require(WhisperText.Select(live, corrected, words) == corrected, "Stripped wake name vetoed command");
+            Require(WhisperText.Select(live, corrected + ". " + corrected + ".", words) == corrected + ".", "Duplicate sentence not collapsed before length check");
             return Task.CompletedTask;
         });
         await Check("Whisper download rejects size mismatch and digest mismatch before use", async () =>
@@ -138,9 +187,10 @@ internal static class WhisperChecks
                     var status = await engine.CheckAsync(selected, limit.Token); int pid = engine.ProcessId;
                     Require(pid > 0 && status.Contains(selected == "cuda" ? "NVIDIA" : "CPU"), "Actual backend not ready: " + status);
                     var wav = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(AppPaths.WindowsRoot, "artifacts", "whisper-native", "clock.wav")));
-                    var watch = Stopwatch.StartNew(); var text = await engine.RefineAsync(new UiSettings { WhisperMode = selected }, wav, limit.Token);
-                    Require(text.Contains("몇") && text.Contains("시"), "Synthetic clock sample not recognized: " + text);
-                    rows.Add(new { name = "Whisper native " + selected + " sample measurement", pass = true, seconds = watch.Elapsed.TotalSeconds, text });
+                    var watch = Stopwatch.StartNew(); var transcript = await engine.RefineAsync(new UiSettings { WhisperMode = selected }, wav, limit.Token);
+                    Require(transcript.Text.Contains("몇") && transcript.Text.Contains("시"), "Synthetic clock sample not recognized: " + transcript.Text);
+                    Require(transcript.Words.Count > 0 && transcript.Words.All(w => double.IsFinite(w.Probability) && w.Probability is >= 0 and <= 1), "Native token confidence missing");
+                    rows.Add(new { name = "Whisper native " + selected + " sample measurement", pass = true, seconds = watch.Elapsed.TotalSeconds, text = transcript.Text, words = transcript.Words });
                     Require(engine.ProcessId == pid, "Model unnecessarily restarted");
                     engine.Stop(); Require(engine.ProcessId == 0, "Server retained");
                     try { using var old = Process.GetProcessById(pid); Require(old.HasExited, "Owned server still running"); } catch (ArgumentException) { }

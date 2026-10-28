@@ -166,7 +166,7 @@ public sealed class NameTrainingWindow : Window
             if (finalWav.Length > 0 && WhisperEngine.Enabled(preferences))
             {
                 status.Text = "설정된 로컬 서버에서 발음을 확인하고 있어요.";
-                try { refined = await WhisperEngine.Shared.RefineAsync(preferences, finalWav, lifetime.Token); }
+                try { refined = (await WhisperEngine.Shared.RefineAsync(preferences, finalWav, lifetime.Token)).Text; }
                 catch (Exception ex) when (ex is not OperationCanceledException) { notice = "로컬 보정을 사용하지 못해 실시간 인식 결과로 확인했어요. "; }
             }
             if (closed) return;

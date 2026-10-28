@@ -49,10 +49,10 @@ internal sealed class WhisperEngine : IDisposable
         try { await StartAsync(selectedMode, linked.Token).ConfigureAwait(false); return Status; }
         finally { serial.Release(); }
     }
-    public async Task<string> RefineAsync(UiSettings settings, string wav, CancellationToken token)
+    public async Task<WhisperTranscript> RefineAsync(UiSettings settings, string wav, CancellationToken token)
     {
         if (settings.WhisperMode == "external") return await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords);
-        if (!Enabled(settings)) return "";
+        if (!Enabled(settings)) return WhisperTranscript.Empty;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.Token);
         await serial.WaitAsync(linked.Token);
         try

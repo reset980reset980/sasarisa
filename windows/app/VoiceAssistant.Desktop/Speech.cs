@@ -86,20 +86,24 @@ public sealed class SpeechInput : IDisposable
         foreach (var line in text.Split('\n').Where(x => x.StartsWith('{'))) { using var d = JsonDocument.Parse(line); if (d.RootElement.GetProperty("type").GetString() == "devices") return JsonSerializer.Deserialize<List<DeviceOption>>(d.RootElement.GetProperty("devices")) ?? new(); }
         return new[] { new DeviceOption("", "Windows 기본 마이크") };
     }
-    public static async Task<string> RefineAsync(string url, string wav, CancellationToken ct, string[]? words = null)
+    internal static async Task<WhisperTranscript> RefineAsync(string url, string wav, CancellationToken ct, string[]? words = null)
     {
         var u = SettingsStore.ValidateLocalUrl(url);
         var endpoint = new Uri(u.GetLeftPart(UriPartial.Authority) + "/inference");
         return await RefineEndpointAsync(endpoint, wav, ct, words);
     }
-    internal static async Task<string> RefineEndpointAsync(Uri endpoint, string wav, CancellationToken ct, string[]? words = null)
+    internal static async Task<WhisperTranscript> RefineEndpointAsync(Uri endpoint, string wav, CancellationToken ct, string[]? words = null)
     {
         SettingsStore.ValidateLocalUrl(endpoint.AbsoluteUri);
         if (wav.Length > 3_000_000) throw new ArgumentException("보정할 음성이 너무 길어요.");
-        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(25) };
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(25), MaxResponseContentBufferSize = 1_048_576 };
         using var form = new MultipartFormDataContent();
         var content = new ByteArrayContent(Convert.FromBase64String(wav)); content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-        form.Add(content, "file", "speech.wav"); form.Add(new StringContent("ko"), "language"); form.Add(new StringContent("json"), "response_format");
+        form.Add(content, "file", "speech.wav"); form.Add(new StringContent("ko"), "language"); form.Add(new StringContent("verbose_json"), "response_format");
+        // Confidence is available independently of token timing; timing is costly on CPU and unused here.
+        form.Add(new StringContent("false"), "token_timestamps");
+        // verbose_json otherwise runs another encoder pass to detect every language, despite language=ko.
+        form.Add(new StringContent("true"), "no_language_probabilities");
         form.Add(new StringContent("0"), "temperature"); form.Add(new StringContent("0"), "temperature_inc");
         if (words is { Length: > 0 })
         {
@@ -109,7 +113,7 @@ public sealed class SpeechInput : IDisposable
         try
         {
             using var res = await client.PostAsync(endpoint, form, ct); res.EnsureSuccessStatusCode();
-            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)); return doc.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)); return WhisperTranscript.Parse(doc.RootElement);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("음성 보정 응답 시간이 초과됐어요."); }
     }

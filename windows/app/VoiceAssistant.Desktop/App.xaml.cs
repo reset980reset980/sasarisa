@@ -303,19 +303,20 @@ public partial class App : System.Windows.Application
                 window.SetStatus("문장을 다듬어 듣는 중", "로컬 Whisper 서버에서 확인하고 있어요.", listening, true);
                 try
                 {
-                    var refined = await WhisperEngine.Shared.RefineAsync(settings, wav, token);
+                    var transcript = await WhisperEngine.Shared.RefineAsync(settings, wav, token);
+                    var refined = transcript.Text;
                     token.ThrowIfCancellationRequested();
                     if (interruptedSpeech) refined = BargeInSession.DropGreeting(refined, settings.Desktop.UserName);
                     if (!string.IsNullOrWhiteSpace(refined))
                     {
                         refined = isDictation ? refined.Trim() : LearnedNames.Strip(refined, settings);
-                        refined = WhisperText.Select(text, refined);
+                        refined = WhisperText.Select(text, refined, transcript.Words);
                         var refinedPlan = Greetings.Parse(refined, settings) ?? CommandParser.Parse(refined, webSearch);
                         if (isDictation || parsed == null || refinedPlan != null) { LearnVocabulary(text, refined); text = refined; }
                     }
                     parsed = Greetings.Parse(text, settings) ?? CommandParser.Parse(text, webSearch);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException) { window.AddMessage("system", "Whisper 연결이 되지 않아 실시간 인식 결과를 사용해요. " + ex.Message); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { window.AddMessage("system", "Whisper 보정을 사용하지 못해 실시간 인식 결과를 사용해요. " + ex.Message); }
             }
             token.ThrowIfCancellationRequested(); window.SetPartial(""); window.AddMessage("user", text);
             var kakaoCommand = isDictation ? null : KakaoCommands.Parse(text);

@@ -26,18 +26,21 @@ public partial class App
     {
         if (!IsolatedPhoneProfile()) return 2;
         InitializeInternetPhoneFixture(); window.SettingsSaved += SaveSettings;
-        int failed = 0, requests = 0; string refined = "알파카 5분 타이머"; bool wait = false;
+        int failed = 0, requests = 0; string refined = "알파카 5분 타이머"; bool wait = false; string? rawResponse = null;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var rows = new List<object>();
         void Require(bool value, string message) { if (!value) throw new Exception(message); }
+        string Reply(string text, params WhisperWord[] words) => JsonSerializer.Serialize(new { text, segments = new[] { new { words = words.Select(w => new { word = w.Text, probability = w.Probability }).ToArray() } } });
         async Task Check(string name, Func<Task> action) { try { await action(); rows.Add(new { name, pass = true }); } catch (Exception ex) { failed++; rows.Add(new { name, pass = false, error = ex.ToString() }); } }
         var builder = WebApplication.CreateSlimBuilder(); builder.Logging.ClearProviders(); builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0));
         await using var server = builder.Build();
         server.MapPost("/inference", async (HttpContext context) =>
         {
-            Interlocked.Increment(ref requests); _ = await context.Request.ReadFormAsync(context.RequestAborted);
+            Interlocked.Increment(ref requests); var form = await context.Request.ReadFormAsync(context.RequestAborted);
+            if (form["response_format"] != "verbose_json" || form["token_timestamps"] != "false" || form["no_language_probabilities"] != "true" || form["language"] != "ko" || form.Files.Count != 1) { context.Response.StatusCode = 400; return; }
             if (wait) { entered.TrySetResult(); await Task.Delay(Timeout.Infinite, context.RequestAborted); }
-            await context.Response.WriteAsJsonAsync(new { text = refined }, context.RequestAborted);
+            if (rawResponse != null) { context.Response.ContentType = "application/json"; await context.Response.WriteAsync(rawResponse, context.RequestAborted); }
+            else await context.Response.WriteAsJsonAsync(new { text = refined }, context.RequestAborted);
         });
         await server.StartAsync(); var url = server.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
         var wav = Convert.ToBase64String(new byte[44]);
@@ -113,6 +116,40 @@ public partial class App
                 refined = "알파카 타임업 시작해"; before = timers.Items.Count;
                 await SubmitAsync("알파카 5분 타이머", true, wav);
                 Require(timers.Items.Count == before + 1, "Broken refinement overrode a known live command");
+            });
+            await Check("Whisper App uncertain word pieces neither replace live commands nor learn vocabulary", async () =>
+            {
+                settings = settings with { Text = settings.Text with { AutoLearnWords = true } }; SettingsStore.Save(settings);
+                var before = JsonSerializer.Serialize(settings.Text); var disk = File.ReadAllText(AppPaths.ConfigFile);
+                rawResponse = Reply(settings.Name + " 블렌더 5분 타이머", new(" " + settings.Name, 0.9), new(" 블렌", 0.9), new("더", 0.2), new(" 5분", 0.95), new(" 타이머", 0.9));
+                for (int i = 0; i < 3; i++)
+                {
+                    int count = timers.Items.Count; await SubmitAsync("블렌다 5분 타이머", true, wav);
+                    Require(timers.Items.Count == count + 1 && timers.Items[^1].Label.Contains("블렌다"), "Uncertain term overrode live command");
+                }
+                Require(JsonSerializer.Serialize(settings.Text) == before && File.ReadAllText(AppPaths.ConfigFile) == disk, "Uncertain word was learned or persisted");
+                rawResponse = rawResponse.Replace("0.2", "0.8");
+                await SubmitAsync("블렌다 5분 타이머", true, wav);
+                Require(timers.Items[^1].Label.Contains("블렌더") && settings.Text.WordCandidates.Values.Any(x => x.Word == "블렌더" && x.Count == 1), "Certain correction did not reach command and learning");
+                rawResponse = null;
+            });
+            await Check("Whisper App low confidence number cannot change the requested timer duration", async () =>
+            {
+                rawResponse = Reply("삼십 분 타이머", new(" 삼", 0.9), new("십", 0.1), new(" 분", 0.9), new(" 타이머", 0.9));
+                await SubmitAsync("십 분 타이머", true, wav);
+                var remaining = (timers.Items[^1].Due - DateTimeOffset.Now).TotalSeconds;
+                Require(remaining is > 590 and <= 601, "Low-confidence number changed ten minutes to thirty"); rawResponse = null;
+            });
+            await Check("Whisper App malformed probabilities and oversized HTTP replies fall back without learning", async () =>
+            {
+                var before = JsonSerializer.Serialize(settings.Text);
+                foreach (var body in new[] { "{\"text\":\"블렌더 5분 타이머\",\"segments\":[{\"words\":[{\"word\":\" 블렌더\",\"probability\":\"invalid\"}]}]}", new string(' ', 1_048_577) })
+                {
+                    rawResponse = body; int count = timers.Items.Count; await SubmitAsync("블렌다 5분 타이머", true, wav);
+                    Require(timers.Items.Count == count + 1 && timers.Items[^1].Label.Contains("블렌다"), "Invalid reply lost or replaced live command");
+                    Require(JsonSerializer.Serialize(settings.Text) == before, "Invalid reply learned words");
+                }
+                rawResponse = null;
             });
             await Check("Whisper App cancellation runs no action and missing managed engine falls back", async () =>
             {
