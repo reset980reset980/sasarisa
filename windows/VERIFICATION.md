@@ -1,5 +1,15 @@
 # Windows 포트 검증 기록
 
+## 2026-10-28 · 0.2.32 Whisper Windows 구성 요소
+
+- CPU/CUDA 공식 파일의 import를 조사해 `MSVCP140.dll`, `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`뿐 아니라 `VCOMP140.dll`도 필요한 것을 확인했습니다. System32 절대 경로와 제한된 DLL 검색으로 실제 로딩을 검사하고, 해시 검증된 Whisper 바이너리의 PE import 이름/ordinal을 읽어 필요한 내보내기 함수까지 확인합니다. 누락·호환 불가면 네이티브 엔진과 큰 모델 다운로드를 시작하지 않습니다. DLL 오류 대화상자도 띄우지 않습니다.
+- Microsoft 공식 x64 설치 파일 14.51.36247.0, 18,731,856 bytes, SHA-256 `843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C`를 고정했습니다. 공식 URL·크기/해시와 WinVerifyTrust·PKCS7 게시자(Microsoft Corporation)를 검증합니다. 사용자가 준비 화면의 설치·복구를 눌러야 Microsoft 설치 창을 열며, silent 설치/약관 자동 동의/명시적 runas/자동 재시작은 요청하지 않습니다. 설치 파일을 열 때 읽기 전용으로 잠그고 다시 검증합니다. 기존 Whisper 프로세스는 먼저 종료합니다.
+- 설치 창 취소/실패/더 최신 버전/재시작 필요를 구분하며 실제 구성 요소 상태를 다시 확인합니다. 대기 취소나 창 닫기는 Windows 설치 작업을 강제 종료하지 않습니다. 구성 요소 설치만으로 Whisper 사용 설정을 바꾸지 않습니다. 설치 프로그램은 Microsoft에서 직접 받으며 MSI에 재배포하지 않습니다. [Microsoft 런타임 안내](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170), [LoadLibraryEx](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw), [WinVerifyTrust](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/nf-wintrust-winverifytrust), [PKCS7 API 안내](https://learn.microsoft.com/en-us/dotnet/fundamentals/syslib-diagnostics/syslib0057).
+- 개발본 일반 검사 **392/392**, 구성 요소 전용 **7/7**(일반 4개 포함): 실제 빈 DLL 폴더로 누락 재현·엔진/다운로드 무실행, PE 이름/ordinal·손상 입력, 설치 인자/결과, 미서명 파일 거부, 현재 PC의 4개 라이브러리와 모든 공식 CPU/CUDA import, 없는 export 거부, 공식 파일 실제 다운로드·해시/게시자·캐시 재사용·변조 거부·취소, 유효한 Python Software Foundation 서명을 Microsoft로 오인하지 않음. 실제 CPU/CUDA·추론 취소·부모 종료 회귀 **14/14**. `artifacts/whisper-prerequisite-checks.json`, `whisper-checks.json`.
+- WPF/App 검사 **6/6**: 기존 5개 검사와 구성 요소 누락/설치 후 재시작 안내/실패/대기 취소/설정 미적용을 실제 버튼 이벤트로 검사했습니다. 설치 프로세스만 모의 함수로 대체했고 Microsoft 설치 프로그램을 실제 실행하지 않았습니다. 현재 PC의 14.51.36247.0 구성 요소는 변경하지 않았습니다. 깨끗한 Windows의 전체 설치·UAC·재시작 전후 검증은 별도로 남아 있습니다. 마이크·스피커 시험 재생·유튜브 창은 실행하지 않았습니다. `artifacts/whisper-app-checks.json`, `whisper-setup.png`.
+- **0.2.32 설치 완료**: MSI 99,812,180 bytes, SHA-256 `B95B6B6CBBB5813B62F6DE59A0CC8E6D2084D4E8F1730318B5BA22773D49227E`. 0.2.31 백업 `install-backups/Sasarisa-0.2.31-20261028-085731-9a9659.zip`과 새 설치본 각각 1,765개 파일의 명세·해시를 확인했습니다. 설치본 일반 **392/392**, Whisper App 6·단어 App 6·듣기 App 4·휴대폰 App 10개를 합해 **418/418** 통과. 설치본의 Microsoft 실제 다운로드/서명/게시자 및 import 검사도 **7/7** 통과(일반 검사와 4개 중복)했습니다. 공식 CPU/CUDA 검사 입력은 신뢰 매니페스트의 해시와 일치하는 파일만 복사해 사용했습니다.
+- 사용자 JSON 5개와 모델 파일 5개 해시를 재실행 후까지 보존했습니다. 일반 앱 PID 49920, 0.2.32.0 응답 정상·듣기 꺼짐·음성/Whisper 작업 프로세스 없음. 소스 ZIP 199개 중 Windows 파일 198개가 빌드 시 소스와 일치하고 개인 파일/모델/빌드 출력은 제외됐습니다. 이 설치 결과 기록만 패키지 생성 뒤 추가됐습니다. `artifacts/installed-self-test-0232`, `upgrade-result-0232.json`, `source-check-0232.json`, `final-state-0232.json`.
+
 ## 2026-10-28 · 0.2.31 로컬 Whisper 관리
 
 - 공식 `ggml-org/whisper.cpp` b5454(소스 d1be6fde, v1.9.5와 같은 커밋) CPU 및 CUDA 12.4 배포와 Hugging Face 고정 리비전의 `large-v3-turbo-q8_0`를 사용합니다. CUDA 11.8 배포는 cuBLAS 의존 파일 누락으로 CPU에 돌아가 사용하지 않습니다. 새 엔진은 아카이브/모델 크기·SHA-256 및 포함 DLL/EXE 해시를 검증합니다. 설치 중 취소·손상·중복/상위 경로·예상 밖 DLL을 검사하고 교체 전에 복구 폴더를 보존합니다.

@@ -62,14 +62,39 @@ public partial class App
                     Require((string)choice.SelectedValue == "cuda", "Selected GPU mode lost");
                     var apply = VocabularyControls<Button>(body).Single(x => Equals(x.Content, "설정에 선택"));
                     Require(!apply.IsEnabled, "Unverified engine marked ready");
-                    body.Measure(new Size(610, 455)); body.Arrange(new Rect(0, 0, 610, 455)); body.UpdateLayout();
-                    var bitmap = new RenderTargetBitmap(610, 455, 96, 96, PixelFormats.Pbgra32); bitmap.Render(body);
+                    body.Measure(new Size(640, 610)); body.Arrange(new Rect(0, 0, 640, 610)); body.UpdateLayout();
+                    var bitmap = new RenderTargetBitmap(640, 610, 96, 96, PixelFormats.Pbgra32); bitmap.Render(body);
                     var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
                     using var file = File.Create(Path.Combine(AppPaths.WindowsRoot, "artifacts", "whisper-setup.png")); png.Save(file);
                     choice.SelectedValue = "cpu"; Require(!apply.IsEnabled && dialog.SelectedMode == null, "Selection applies without confirmation");
                 }
                 finally { dialog.Close(); }
                 return Task.CompletedTask;
+            });
+            await Check("Whisper WPF runtime repair handles missing success cancellation and failures without applying settings", async () =>
+            {
+                bool ready = false, fail = false, waiting = false; int launches = 0;
+                var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var dialog = new WhisperSetupWindow("cpu", () => new(ready, ready ? "구성 요소 있음" : "Microsoft 구성 요소 없음"),
+                    (_, token) => Task.FromResult("verified-test-file"), async (_, token) => { launches++; if (fail) throw new IOException("시험 설치 실패"); if (waiting) { started.TrySetResult(); await Task.Delay(Timeout.Infinite, token); } ready = true; return 3010; });
+                try
+                {
+                    var body = (FrameworkElement)dialog.Content;
+                    var buttons = VocabularyControls<Button>(body).ToArray();
+                    var repair = buttons.Single(x => Equals(x.Content, "Microsoft 구성 요소 설치·복구"));
+                    var apply = buttons.Single(x => Equals(x.Content, "설정에 선택"));
+                    Require(!apply.IsEnabled && launches == 0, "Opening setup started an installer");
+                    repair.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await Task.Yield();
+                    Require(launches == 1 && ready && repair.IsEnabled && !apply.IsEnabled && dialog.SelectedMode == null, "Runtime install silently enabled engine");
+                    Require(VocabularyControls<TextBlock>(body).Any(x => x.Text.Contains("Windows를 다시 시작해야")), "Reboot-required outcome lost");
+                    ready = false; fail = true; repair.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await Task.Yield();
+                    Require(repair.IsEnabled && VocabularyControls<TextBlock>(body).Any(x => x.Text.Contains("시험 설치 실패")), "Installer failure hidden");
+                    fail = false; waiting = true; repair.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                    buttons.Single(x => Equals(x.Content, "대기 중지")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    for (int n = 0; n < 50 && !repair.IsEnabled; n++) await Task.Delay(20);
+                    Require(repair.IsEnabled && !apply.IsEnabled && !ready && dialog.SelectedMode == null, "Cancelled installer wait applies settings or leaves UI busy");
+                }
+                finally { dialog.Close(); }
             });
             await Check("Whisper App skips known clock commands and typed input while refining speech with custom text", async () =>
             {

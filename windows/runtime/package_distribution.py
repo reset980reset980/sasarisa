@@ -40,6 +40,8 @@ def package(stage, root, version, wix):
         "NAudio 3.3.0: https://github.com/naudio/NAudio; MIT license: NAudio-LICENSE.txt.\n"
         "ModelContextProtocol.Core 2.3.0: https://github.com/modelcontextprotocol/csharp-sdk; Apache-2.0 with legacy MIT contributions; see ModelContextProtocol-LICENSE.txt.\n"
         "Microsoft.Extensions dependencies: https://github.com/dotnet/extensions; MIT license: MicrosoftExtensions-LICENSE.txt.\n"
+        "Optional Whisper engine: https://github.com/ggml-org/whisper.cpp; source license: Whisper-LICENSE.txt. Native runtime/model files are downloaded separately.\n"
+        "Optional Microsoft Visual C++ x64 prerequisite installer is downloaded directly from Microsoft after a user request; it is not included in this MSI.\n"
         "Python dependencies and their licenses/metadata are included under python/Lib/site-packages/*.dist-info.\n"
         "These include sherpa-onnx 2.0.0, sherpa-onnx-core 2.0.0, sentencepiece 0.2.2, sounddevice 0.5.6, soundfile 0.14.0, numpy 2.4.6, cffi 2.1.1, pycparser 3.12, and typing_extensions 4.16.0.\n"
         "MSI is built with WiX Toolset 4.0.6: https://github.com/wixtoolset/wix (MS-RL).\n\n"

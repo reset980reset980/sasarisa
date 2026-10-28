@@ -15,6 +15,7 @@ internal sealed class WhisperEngine : IDisposable
 {
     public static WhisperEngine Shared { get; } = new(WhisperAssets.Home);
     readonly string root;
+    readonly Func<WhisperPrerequisiteStatus> prerequisites;
     readonly SemaphoreSlim serial = new(1, 1);
     readonly object sync = new();
     readonly CancellationTokenSource lifetime = new();
@@ -25,9 +26,10 @@ internal sealed class WhisperEngine : IDisposable
     string mode = "";
     DateTime used;
     bool gpu, disposed;
-    public WhisperEngine(string directory)
+    public WhisperEngine(string directory, Func<WhisperPrerequisiteStatus>? checkPrerequisites = null)
     {
         root = Path.GetFullPath(directory);
+        prerequisites = checkPrerequisites ?? WhisperPrerequisites.CheckSystem;
         idle = new Timer(_ => TrimIdle(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
     public static bool Enabled(UiSettings settings) => settings.WhisperMode is "cpu" or "cuda" || settings.WhisperMode == "external" && !string.IsNullOrWhiteSpace(settings.WhisperUrl);
@@ -37,7 +39,7 @@ internal sealed class WhisperEngine : IDisposable
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.Token);
         await serial.WaitAsync(linked.Token);
-        try { Stop(); await WhisperAssets.InstallAsync(root, selectedMode, progress, linked.Token).ConfigureAwait(false); }
+        try { Stop(); RequirePrerequisites(); await WhisperAssets.InstallAsync(root, selectedMode, progress, linked.Token).ConfigureAwait(false); }
         finally { serial.Release(); }
     }
     public async Task<string> CheckAsync(string selectedMode, CancellationToken token)
@@ -81,7 +83,9 @@ internal sealed class WhisperEngine : IDisposable
         var ct = timeout.Token;
         try
         {
+            RequirePrerequisites();
             await WhisperAssets.VerifyAsync(root, selectedMode, ct).ConfigureAwait(false);
+            WhisperPrerequisites.RequireImports(WhisperAssets.Runtime(root, selectedMode));
             var publicPath = Path.Combine(root, "empty-public"); WhisperAssets.PlainDirectory(publicPath); Directory.CreateDirectory(publicPath);
             if (Directory.EnumerateFileSystemEntries(publicPath).GetEnumerator() is { } items) { using (items) if (items.MoveNext()) throw new IOException("보정 엔진의 빈 공개 폴더를 확인해 주세요."); }
             var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
@@ -144,6 +148,10 @@ internal sealed class WhisperEngine : IDisposable
         if (!serial.Wait(0)) return;
         try { lock (sync) if (process != null && DateTime.UtcNow - used > TimeSpan.FromMinutes(3)) StopLocked(); }
         finally { serial.Release(); }
+    }
+    void RequirePrerequisites()
+    {
+        var status = prerequisites(); if (!status.Ready) throw new WhisperPrerequisiteException(status.Detail);
     }
     public void Stop() { lock (sync) StopLocked(); }
     void StopOwned(Process own) { lock (sync) if (process == own) StopLocked(); }

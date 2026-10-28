@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--whisper-prerequisites-only"))
+        {
+            failed = await WhisperPrerequisiteChecks.RunAsync(rows, args.Contains("--whisper-prerequisites-native"));
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "whisper-prerequisite-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--whisper-only"))
         {
             failed = await WhisperChecks.RunAsync(rows, args.Contains("--whisper-native"));
@@ -315,6 +321,7 @@ public static class Checks
         failed += SettingsTransferChecks.Run(rows);
         failed += await DistributionChecks.RunAsync(rows);
         failed += await WhisperChecks.RunAsync(rows);
+        failed += await WhisperPrerequisiteChecks.RunAsync(rows);
         failed += await AgentChecks.RunAsync(rows, args.Contains("--ai"));
         failed += await BrowserChecks.RunAsync(rows, args.Contains("--ai"));
         if(args.Contains("--codex"))
