@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--browser-page-app-only")) { Shutdown(await RunBrowserPageAppChecksAsync(e.Args.Contains("--browser-edge"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-tuning-app-only")) { Shutdown(RunInputTuningAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--aside-phone-app-only")) { Shutdown(await RunAsidePhoneAppChecksAsync(e.Args.Contains("--aside-internet"), e.Args.Contains("--aside-native"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--text-edit-fixture")) { await RunTextEditFixtureAsync(e.Args[^1]); Shutdown(); return; }
@@ -408,8 +409,9 @@ public partial class App : System.Windows.Application
         if (action.Kind == "undo") return await actionHistory.UndoAsync(token);
         if (action.Kind == "close_owned")
         {
-            if (ownedWindows.Count == 0) return "비서가 새로 연 것으로 확인한 창이 없어요. 기존 창은 그대로 둘게요.";
-            var owned = ownedWindows[^1]; var result = await owned.CloseAsync(token); ownedWindows.Remove(owned); return result;
+            var launch = ownedLaunches.LastOrDefault(x => !x.Closed);
+            if (launch == null) return "비서가 새로 연 것으로 확인한 창이나 페이지가 없어요. 기존 창은 그대로 둘게요.";
+            return await launch.CloseAsync(token);
         }
         var version = actionHistory.Version;
         string? reply;
@@ -442,7 +444,7 @@ public partial class App : System.Windows.Application
                 foreach (var url in settings.Desktop.GreetingUrls)
                 {
                     token.ThrowIfCancellationRequested();
-                    try { WindowsActions.OpenUrl(url); actionHistory.Record("인사 웹 페이지 열기"); }
+                    try { await OpenTrackedUrlAsync(url, token); }
                     catch (Exception ex) { window.AddMessage("system", "인사 웹 페이지: " + ex.Message); }
                 }
                 return Greetings.Reply(settings);
@@ -465,8 +467,10 @@ public partial class App : System.Windows.Application
                 var label = AppRegistry.Default.Find(action.Value)?.Name ?? CommandParser.Apps.First(x => x.Value == action.Value).Key;
                 var owned = await OwnedWindow.FindNewAsync(before, launched, label);
                 if (owned != null) { ownedWindows.Add(owned); if (ownedWindows.Count > 20) { ownedWindows[0].Dispose(); ownedWindows.RemoveAt(0); } }
-                actionHistory.Record("앱 열기 · " + label, owned == null ? null : owned.CloseAsync, "새로 연 창을 특정하지 못했어요. 기존 창을 닫지 않도록 직접 닫아 주세요."); break;
-            case "open_url": WindowsActions.OpenUrl(action.Value); webSearch.Opened(action.Value); break;
+                var appLaunch = owned == null ? null : RememberLaunch("앱 열기 · " + label, async ct => { var reply = await owned.CloseAsync(ct); ownedWindows.Remove(owned); return reply; }, owned);
+                if (appLaunch == null) RememberUntrackedLaunch("앱 열기 · " + label);
+                actionHistory.Record("앱 열기 · " + label, appLaunch == null ? null : appLaunch.CloseAsync, "새로 연 창을 특정하지 못했어요. 기존 창을 닫지 않도록 직접 닫아 주세요."); break;
+            case "open_url": await OpenTrackedUrlAsync(action.Value, token); break;
             case "youtube_search":case "youtube_play":return await SearchYouTubeAsync(action,token);
             case "youtube_select":var video=youtube.Select(action.Number);return await PlayVideoAsync(video,token);
             case "youtube_list":return YouTubeList();
@@ -539,11 +543,17 @@ public partial class App : System.Windows.Application
             if (videoWindow is { IsClosed: false }) { await videoWindow.ControlAsync("pause", 0, token); videoWindow.Close(); videoWindow = null; }
             browserVideo ??= new BrowserVideo(hands.VideoDriver()); var browserRequest = ++videoRequest;
             var notice = await browserVideo.OpenAsync(settings.YouTubePlayer, video, token);
-            if (browserVideo.Active) actionHistory.Record("브라우저 영상 · " + video.Title, cancellation =>
+            if (browserVideo.Active)
+            {
+            var launch = RememberLaunch("브라우저 영상 · " + video.Title, cancellation =>
             {
                 if (browserRequest != videoRequest) throw new InvalidOperationException("다른 영상이 재생 중이어서 닫지 않았어요.");
+                if (!browserVideo.Active) return Task.FromResult("그 영상 창은 이미 닫혔거나 추적이 끝났어요.");
                 return browserVideo.ControlAsync("close", 0, cancellation);
             });
+            actionHistory.Record("브라우저 영상 · " + video.Title, launch.CloseAsync);
+            }
+            else RememberUntrackedLaunch("브라우저 영상 열기 요청");
             return notice;
         }
         if (browserVideo is { Active: true }) await browserVideo.ControlAsync("close", 0, token);
@@ -553,12 +563,13 @@ public partial class App : System.Windows.Application
         try
         {
             await own.OpenAsync(video,token);
-            actionHistory.Record("영상 재생 · " + video.Title, _ =>
+            var launch = RememberLaunch("영상 재생 · " + video.Title, _ =>
             {
                 if (own.IsClosed) return Task.FromResult("그 영상 창은 이미 닫혔어요.");
                 if (videoRequest != request || !ReferenceEquals(own, videoWindow)) throw new InvalidOperationException("다른 영상이 재생 중이어서 닫지 않았어요. ‘유튜브 꺼’로 현재 영상을 닫을 수 있어요.");
                 own.Close(); videoWindow = null; return Task.FromResult("비서의 영상 창을 닫았어요.");
             });
+            actionHistory.Record("영상 재생 · " + video.Title, launch.CloseAsync);
         }
         catch{if(request==videoRequest&&ReferenceEquals(own,videoWindow)){own.Close();videoWindow=null;}throw;}
         return "영상 ‘" + video.Title + "’의 재생을 요청했어요.";
@@ -568,11 +579,11 @@ public partial class App : System.Windows.Application
         window.SetStatus("유튜브에서 찾는 중",action.Value,listening,true);
         IReadOnlyList<YouTubeVideo> found;
         try{found=await youtube.SearchAsync(action.Value,token);}
-        catch(Exception ex)when(ex is not OperationCanceledException){token.ThrowIfCancellationRequested();WindowsActions.OpenUrl(YouTubeSearch.SearchUrl(action.Value));return "영상 목록을 읽지 못해 검색 페이지를 열었어요. "+ex.Message;}
+        catch(Exception ex)when(ex is not OperationCanceledException){token.ThrowIfCancellationRequested();await OpenTrackedUrlAsync(YouTubeSearch.SearchUrl(action.Value),token);return "영상 목록을 읽지 못해 검색 페이지를 열었어요. "+ex.Message;}
         token.ThrowIfCancellationRequested();
-        if(found.Count==0){WindowsActions.OpenUrl(YouTubeSearch.SearchUrl(action.Value));return "영상 목록을 읽지 못해 검색 페이지를 열었어요.";}
+        if(found.Count==0){await OpenTrackedUrlAsync(YouTubeSearch.SearchUrl(action.Value),token);return "영상 목록을 읽지 못해 검색 페이지를 열었어요.";}
         window.AddMessage("system",YouTubeList());
-        if(action.Kind=="youtube_search"){WindowsActions.OpenUrl(YouTubeSearch.SearchUrl(action.Value));return "검색 결과를 열었어요. ‘두 번째 영상 틀어’처럼 골라 주세요.";}
+        if(action.Kind=="youtube_search"){await OpenTrackedUrlAsync(YouTubeSearch.SearchUrl(action.Value),token);return "검색 결과를 열었어요. ‘두 번째 영상 틀어’처럼 골라 주세요.";}
         var playback = await PlayVideoAsync(found[0],token);return playback + " ‘두 번째 영상 틀어’처럼 다른 결과를 고를 수도 있어요.";
     }
     async Task SayAsync(string text, CancellationToken token, bool force = false,UiSettings? preview=null)
@@ -622,5 +633,5 @@ public partial class App : System.Windows.Application
         if (!await brain.WaitForAsideStopAsync()) AppPaths.Log("aside-stop", "앱 종료 제한 시간 안에 Aside 작업 중지를 확인하지 못했어요.");
         videoWindow?.Close(); tray?.Dispose(); Native.UnregisterHotKey(handle, 1); Native.UnregisterHotKey(handle, 2); overlay.Close(); window.Close(); Shutdown();
     }
-    protected override void OnExit(ExitEventArgs e) { WhisperEngine.Shared.Dispose(); microphoneMonitor?.Dispose(); displayPower?.Dispose(); hotkeys?.Dispose(); foreach (var owned in ownedWindows) owned.Dispose(); input.Dispose(); output.Dispose(); tray?.Dispose(); showWait?.Unregister(null); quitWait?.Unregister(null); showEvent?.Dispose(); quitEvent?.Dispose(); singleton?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e) { WhisperEngine.Shared.Dispose(); microphoneMonitor?.Dispose(); displayPower?.Dispose(); hotkeys?.Dispose(); foreach (var launch in ownedLaunches) launch.Dispose(); foreach (var owned in ownedWindows) owned.Dispose(); input.Dispose(); output.Dispose(); tray?.Dispose(); showWait?.Unregister(null); quitWait?.Unregister(null); showEvent?.Dispose(); quitEvent?.Dispose(); singleton?.Dispose(); base.OnExit(e); }
 }

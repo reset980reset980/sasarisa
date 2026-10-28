@@ -36,14 +36,24 @@ public sealed partial class WindowsActions
     {
         ValidateBrowserWindow(window);
         var root = AutomationElement.FromHandle(window.Handle);
-        var tabs = new List<BrowserUiTab>(); var addresses = new List<(string name, string value)>();
+        var tabs = new List<BrowserUiTab>(); var addresses = new List<(string name, string value)>(); var documentAddresses = new List<string>();
         var timer = Stopwatch.StartNew(); int visited = 0;
         void Walk(AutomationElement element, int depth)
         {
             if (depth > 22 || ++visited > 1800 || timer.Elapsed > TimeSpan.FromSeconds(3)) throw new InvalidOperationException("브라우저의 탭 표시를 제한 시간 안에 확인하지 못했어요.");
             var current = element.Current;
             // Never search webpage inputs for browser controls with similar names.
-            if (current.ControlType == ControlType.Document) return;
+            if (current.ControlType == ControlType.Document)
+            {
+                // Chromium's document value is its full tree URL; the omnibox
+                // value may omit the scheme. Never inspect webpage form fields.
+                if (!current.IsOffscreen && element.TryGetCurrentPattern(ValuePattern.Pattern, out var documentValue))
+                {
+                    var value = ((ValuePattern)documentValue).Current.Value;
+                    if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https") documentAddresses.Add(uri.AbsoluteUri);
+                }
+                return;
+            }
             if (current.ControlType == ControlType.TabItem && element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var selection))
             { tabs.Add(new(RuntimeKey(element), current.Name, ((SelectionItemPattern)selection).Current.IsSelected, element)); return; }
             if (current.ControlType == ControlType.Edit && !current.IsPassword && !current.IsOffscreen && element.TryGetCurrentPattern(ValuePattern.Pattern, out var valuePattern))
@@ -58,6 +68,7 @@ public sealed partial class WindowsActions
         var labeled = addresses.Where(x => x.name.Contains("주소", StringComparison.Ordinal) || x.name.Contains("address", StringComparison.OrdinalIgnoreCase)).ToArray();
         var chosen = labeled.Length == 1 ? labeled : addresses.ToArray();
         var address = chosen.Length == 1 ? chosen[0].value : null;
+        address = BrowserPageOwnership.VerifiedAddress(address, documentAddresses);
         // Preserve the provider's address. Host matching parses it separately.
         return new(tabs, address);
     }

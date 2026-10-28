@@ -16,7 +16,7 @@ public sealed record OwnedWindow(IntPtr Handle, int ProcessId, long ProcessStart
     IntPtr destroyHook;
     EventCallback? destroyCallback;
     GCHandle callbackRoot;
-    bool destroyed, released;
+    volatile bool destroyed, released;
     delegate bool EnumCallback(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumCallback callback, IntPtr parameter);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
@@ -43,13 +43,7 @@ public sealed record OwnedWindow(IntPtr Handle, int ProcessId, long ProcessStart
                     var candidates = VisibleWindows().Where(h => !before.Contains(h) && Pid(h) == pid && Native.Title(h).Length > 0).ToArray();
                     if (candidates.Length == 1)
                     {
-                        var owned = new OwnedWindow(candidates[0], pid, started, label);
-                        owned.destroyCallback = (_, _, h, objectId, childId, _, _) => { if (h == owned.Handle && objectId == 0 && childId == 0) owned.destroyed = true; };
-                        owned.callbackRoot = GCHandle.Alloc(owned.destroyCallback);
-                        owned.destroyHook = SetWinEventHook(0x8001, 0x8001, IntPtr.Zero, owned.destroyCallback, (uint)pid, 0, 0);
-                        if (owned.destroyHook == IntPtr.Zero) { owned.Dispose(); return null; }
-                        if (!owned.IsSameWindow()) { owned.Dispose(); return null; }
-                        return owned;
+                        return Watch(candidates[0], pid, started, label);
                     }
                     if (candidates.Length > 1) return null;
                     await Task.Delay(100);
@@ -60,6 +54,16 @@ public sealed record OwnedWindow(IntPtr Handle, int ProcessId, long ProcessStart
         return null;
     }
     static int Pid(IntPtr handle) { Native.GetWindowThreadProcessId(handle, out var id); return (int)id; }
+    internal static OwnedWindow? Watch(IntPtr handle, int pid, long started, string label)
+    {
+        var owned = new OwnedWindow(handle, pid, started, label);
+        owned.destroyCallback = (_, _, h, objectId, childId, _, _) => { if (h == owned.Handle && objectId == 0 && childId == 0) owned.destroyed = true; };
+        owned.callbackRoot = GCHandle.Alloc(owned.destroyCallback);
+        owned.destroyHook = SetWinEventHook(0x8001, 0x8001, IntPtr.Zero, owned.destroyCallback, (uint)pid, 0, 0);
+        if (owned.destroyHook == IntPtr.Zero || !owned.IsSameWindow()) { owned.Dispose(); return null; }
+        return owned;
+    }
+    internal bool Alive => IsSameWindow();
     bool IsSameWindow()
     {
         if (destroyed || released || !Native.IsWindow(Handle) || Pid(Handle) != ProcessId) return false;
