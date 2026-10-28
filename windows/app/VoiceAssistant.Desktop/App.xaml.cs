@@ -44,6 +44,7 @@ public partial class App : System.Windows.Application
         hands.EditHistory = actionHistory;
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--execution-consent-app-only")) { Shutdown(await RunExecutionConsentAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--speech-capture-app-only")) { Shutdown(RunSpeechCaptureAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-device-app-only")) { Shutdown(InputDeviceAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--codex-effort-app-only")) { Shutdown(CodexEffortAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--wake-phrase-app-only")) { Shutdown(WakePhraseAppChecks.Run()); return; }
@@ -173,6 +174,7 @@ public partial class App : System.Windows.Application
         if (listening && settings.Language != "ko") WhisperEngine.Shared.KeepWarm();
         ReconcileMicrophonePause();
         CheckSpeechTail();
+        CheckSpeechCaptureState();
         CheckMicrophoneHealth();
         if (overlayPreviewUntil != DateTimeOffset.MinValue && DateTimeOffset.Now > overlayPreviewUntil) { overlayPreviewUntil = DateTimeOffset.MinValue; overlay.Configure(settings.Desktop); }
         if (holding && hotkeys?.Wake?.IsPressed() != true) EndHold();
@@ -687,6 +689,7 @@ public partial class App : System.Windows.Application
         if (listening && microphonePause.Blocked) { window.SetStatus(microphonePause.Known ? "다른 앱 사용 중 · 자동 듣기 대기" : "자동 듣기 대기", microphonePause.Detail(HotkeyLabel), true, false, paused: true); return; }
         if (dictating) { window.SetStatus("받아쓰는 중", "입력할 창을 선택하고 말하세요. ‘그만’으로 끝냅니다.", listening, true); return; }
         if (!listening) { window.SetStatus("무엇을 도와드릴까요?", "아래에 명령을 입력하거나 ‘듣기 시작’을 누르세요.", false, false); return; }
+        if (ShouldCaptureSpeech() && speechCapturePending) { window.SetStatus("음성 인식 입력 확인 중", "마이크 신호와 별도로 인식 활성화 응답을 기다리고 있어요.", true, false); return; }
         if (microphoneHealth.Quiet) { window.SetStatus("마이크에 소리가 거의 들어오지 않아요", "헤드셋의 음소거 버튼과 설정의 입력 장치를 확인하세요. 소리가 들어오면 안내가 사라집니다.", true, false, attention: true); return; }
         if(settings.Activation=="hold"){window.SetStatus(holding?"키를 누른 동안 듣고 있어요":"눌러서 말하기 대기",HotkeyLabel+"를 누른 채 말하고, 다 말하면 키를 놓으세요.",true,false);return;}
         window.SetStatus(awakeUntil > DateTimeOffset.Now ? "말씀하세요" : "호출을 기다리고 있어요", settings.Activation == "voice" ? $"{WakePhrases.Cue(settings)} 또는 {HotkeyLabel}로 부를 수 있어요." : $"{HotkeyLabel}로 부른 뒤 말씀하세요.", true, false);

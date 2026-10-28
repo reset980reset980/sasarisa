@@ -61,11 +61,13 @@ public partial class App
     void ObserveCapture(JsonElement message)
     {
         var enabled = message.GetProperty("enabled").GetBoolean();
-        AppPaths.Log("speech-capture", "enabled=" + enabled);
+        AppPaths.Log("speech-capture", "enabled=" + enabled + "; request=" + (message.TryGetProperty("request", out var id) ? id.ToString() : "unknown") + "; expected=" + input.CaptureRequest);
         if (message.TryGetProperty("request", out var request) && request.GetInt32() == input.CaptureRequest)
         {
-            speechCapturePending = !enabled;
-            if (message.TryGetProperty("utterance", out var utterance)) lastUtterance = Math.Max(lastUtterance, utterance.GetInt32() - 1);
+            var accepted = speechCaptureState.Acknowledge(request.GetInt32(), enabled);
+            speechCapturePending = !enabled || !accepted;
+            if (accepted && message.TryGetProperty("utterance", out var utterance)) lastUtterance = Math.Max(lastUtterance, utterance.GetInt32() - 1);
+            RefreshStatus();
         }
     }
     bool TryBargeText(JsonElement message)

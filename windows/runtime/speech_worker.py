@@ -369,6 +369,7 @@ def main():
 
     threading.Thread(target=control_reader, daemon=True).start()
     capture = bool(cfg.get("InitialCapture", cfg.get("Activation", "voice") == "voice"))
+    capture_request = 0
     next_level, last_warning = 0.0, 0.0
     with sd.InputStream(samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=callback, **input_options):
         emit("ready", mode="mic", device=str(input_options['device']), hint_count=recognizer.hint_count, process_id=os.getpid())
@@ -394,6 +395,7 @@ def main():
                     capture = False
                 if msg.get("type") == "capture":
                     capture = bool(msg.get("enabled"))
+                    capture_request = msg.get("request", 0)
                     recognizer.reset()
                     pre_roll.clear()
                     while not audio.empty():
@@ -432,7 +434,7 @@ def main():
             if now >= next_level:
                 rms = float(np.sqrt(np.mean(x * x)))
                 emit("level", value=min(1., rms * 12), rms=rms,
-                     peak=float(np.max(np.abs(x))), recognizing=capture,
+                     peak=float(np.max(np.abs(x))), recognizing=capture, capture_request=capture_request,
                      pitch=periodicity(x) if rms > .02 else 0.0)
                 next_level = now + .09
             pre_roll.append(x, captured_at)

@@ -25,11 +25,26 @@ public partial class App
         });
         microphoneMonitor.Start();
     }
-    void CaptureInput(bool enabled)
+    SpeechCaptureState speechCaptureState = new();
+    void CaptureInput(bool enabled, bool repairing = false)
     {
         CancelWakeCheck();
         speechCapturePending = true;
-        input.Capture(microphonePause.Permit(enabled) && DateTimeOffset.UtcNow >= speechTailUntil);
+        var permitted = microphonePause.Permit(enabled) && DateTimeOffset.UtcNow >= speechTailUntil;
+        input.Capture(permitted);
+        speechCaptureState.Requested(input.CaptureRequest, permitted, repairing);
+    }
+    void CheckSpeechCaptureState()
+    {
+        if (closing || starting || !listening) return;
+        var repair = speechCaptureState.Check(ShouldCaptureSpeech() && !microphonePause.Blocked && DateTimeOffset.UtcNow >= speechTailUntil);
+        if (repair == CaptureRepair.Resend)
+        {
+            AppPaths.Log("speech-capture-repair", "resend enable; request=" + input.CaptureRequest);
+            CaptureInput(true, repairing: true);
+            window.AddMessage("system", "음성 인식 입력 상태를 다시 맞추고 있어요. 잠시 후 이름부터 다시 말씀해 주세요."); RefreshStatus();
+        }
+        else if (repair == CaptureRepair.Reconnect) RecoverMicrophone("decoder capture acknowledgement/state did not recover", recognitionState: true);
     }
     void ReconcileMicrophonePause()
     {

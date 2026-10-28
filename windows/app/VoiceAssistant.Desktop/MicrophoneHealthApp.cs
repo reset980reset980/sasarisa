@@ -15,6 +15,7 @@ public partial class App
     {
         CancelExecutionOffer();
         CancelSendPreview();
+        speechCaptureState.Reset();
         CancelMultilingualStartup();
         if (settings.Language != "ko") WhisperEngine.Shared.Stop();
         CancelWakeCheck();
@@ -26,14 +27,14 @@ public partial class App
         if (listening || automaticSpeechStart) RecoverMicrophone(message);
         else { StopInput(); ShowError(message); RefreshStatus(); }
     }
-    void RecoverMicrophone(string reason)
+    void RecoverMicrophone(string reason, bool recognitionState = false)
     {
         var allowed = microphoneHealth.TryRecover();
         StopInput(); holding = false; window.SetPartial(""); window.SetLevel(0);
         AppPaths.Log("microphone-recovery", (allowed ? "retry: " : "stopped: ") + reason);
         if (!allowed)
         {
-            ShowError("마이크 연결이 반복해서 끊겼어요. 입력 장치를 확인한 뒤 ‘듣기 시작’을 눌러 주세요.");
+            ShowError(recognitionState ? "음성 인식 활성화 응답이 반복해서 오지 않아 자동 복구를 멈췄어요. 잠시 후 ‘듣기 시작’을 눌러 다시 시도해 주세요." : "마이크 연결이 반복해서 끊겼어요. 입력 장치를 확인한 뒤 ‘듣기 시작’을 눌러 주세요.");
             RefreshStatus(); return;
         }
         microphoneRecoveryPending = starting = true;
@@ -68,12 +69,13 @@ public partial class App
         var rms = message.TryGetProperty("rms", out var r) ? r.GetDouble() : value / 12;
         var peak = message.TryGetProperty("peak", out var p) ? p.GetDouble() : rms;
         var recognizing = message.TryGetProperty("recognizing", out var c) && c.GetBoolean();
+        if (message.TryGetProperty("capture_request", out var request) && request.TryGetInt32(out var requestId)) speechCaptureState.Observe(requestId, recognizing);
         var quiet = microphoneHealth.Quiet;
         microphoneHealth.Observe(rms, peak, recognizing);
         if (quiet != microphoneHealth.Quiet) RefreshStatus();
         signalFrames++; signalPeak = Math.Max(signalPeak, rms);
         if (DateTimeOffset.UtcNow < nextSignalLog) return;
-        AppPaths.Log("speech-signal", FormattableString.Invariant($"frames={signalFrames}; maxRms={signalPeak:F7}; recognizing={recognizing}; partials={signalPartials}; finals={signalFinals}"));
+        AppPaths.Log("speech-signal", FormattableString.Invariant($"frames={signalFrames}; maxRms={signalPeak:F7}; recognizing={recognizing}; request={input.CaptureRequest}; pending={speechCapturePending}; partials={signalPartials}; finals={signalFinals}"));
         signalFrames = signalPartials = signalFinals = 0; signalPeak = 0;
         nextSignalLog = DateTimeOffset.UtcNow.AddSeconds(30);
     }

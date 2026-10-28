@@ -78,6 +78,10 @@ class ControlChecks(unittest.TestCase):
         acks = [e for e in events if e['type'] == 'capture']
         self.assertEqual([(e['request'], e['enabled']) for e in acks], [(31, True), (32, False)])
         self.assertGreater(acks[1]['utterance'], acks[0]['utterance'])
+        current_request = 0
+        for event in events:
+            if event['type'] == 'capture': current_request = event['request']
+            elif event['type'] == 'level': self.assertEqual(event['capture_request'], current_request, 'Level state belongs to a different control request')
         self.assertEqual(len(replay), 6, 'First six recent chunks were not replayed after the acknowledgement')
         initial = [value for seq, value in feeds if seq == acks[0]['utterance']]
         self.assertEqual(replay, initial[-6:], 'Barge reset lost or reordered the beginning of speech')
