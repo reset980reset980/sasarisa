@@ -31,7 +31,7 @@ public partial class App
             echoCalibrationKey = EchoCalibration.Key(settings.Device, device);
             initialEchoCoupling = echoCalibration.Get(echoCalibrationKey);
             bargeIn.Echo.UseCoupling(initialEchoCoupling);
-            bargeIn.Begin(text, settings.Name, options.BargeIn, device);
+            bargeIn.Begin(text, settings.Name, options.BargeIn, device, WakePhrases.Active(settings));
             speechTailUntil = DateTimeOffset.MinValue;
             CaptureInput(ShouldCaptureSpeech()); RefreshStatus();
             AppPaths.Log("barge-mode", $"mode={options.BargeIn}; anySpeech={bargeIn.Any}; enabled={CanListenForBarge}");

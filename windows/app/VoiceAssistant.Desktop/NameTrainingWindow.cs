@@ -43,6 +43,7 @@ public sealed class NameTrainingWindow : Window
         panel.Children.Add(Text("부르는 이름을 이 마이크에 맞춰 볼게요", 22));
         panel.Children.Add(Text("이름만 8번, 이름과 짧은 문장 4번을 읽어 주세요. 한 번에 최대 15초입니다. 시험 문장은 실행하지 않습니다. 음성 파일은 저장하지 않으며, 적용하면 이름·선택한 마이크·보정 발음과 시험 글을 저장합니다."));
         panel.Children.Add(Text("마이크: " + device.Label));
+        if (preferences.WakeWords.Length > 0) panel.Children.Add(Text("별도 호출어를 사용 중입니다. 여기서는 이름 발음만 시험하며, 결과는 설정에서 별도 호출어 목록을 비운 뒤 호출에 사용합니다."));
         if (WhisperEngine.Enabled(preferences)) panel.Children.Add(Text("설정된 로컬 Whisper 엔진에서도 시험 발음을 확인합니다."));
         panel.Children.Add(prompt); panel.Children.Add(meter); panel.Children.Add(status); panel.Children.Add(heard);
         var controls = new WrapPanel(); controls.Children.Add(start); controls.Children.Add(finish); controls.Children.Add(retry); panel.Children.Add(controls);
@@ -69,7 +70,7 @@ public sealed class NameTrainingWindow : Window
         input.Stop(); ready = recording = pendingCapture = finishing = refining = false;
         started = lastFrame = DateTimeOffset.UtcNow; health.Begin(manual: true);
         status.Text = "마이크를 준비하고 있어요. 준비가 끝나면 ‘말하기 시작’을 누르세요.";
-        try { input.Start(preferences with { Activation = "hold" }); } catch (Exception ex) { Fail(ex.Message); }
+        try { input.Start(preferences with { Activation = "hold", WakeWords = Array.Empty<string>() }); } catch (Exception ex) { Fail(ex.Message); }
         RefreshButtons();
     }
     void RefreshButtons()

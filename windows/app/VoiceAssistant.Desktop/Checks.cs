@@ -340,6 +340,7 @@ public static class Checks
         failed += await KeyboardChecks.RunAsync(rows, args.Contains("--ai"), args.Contains("--codex"));
         failed += SettingsTransferChecks.Run(rows);
         failed += MacSettingsChecks.Run(rows);
+        failed += WakePhraseChecks.Run(rows);
         failed += await DistributionChecks.RunAsync(rows);
         failed += await WhisperChecks.RunAsync(rows);
         failed += WhisperWakeChecks.Run(rows);

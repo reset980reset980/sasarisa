@@ -107,6 +107,11 @@
                                     <StackPanel><TextBlock Text="호출 이름" Style="{StaticResource FieldLabel}" /><TextBox x:Name="NameInput" Text="자비스" Style="{StaticResource Field}" /><TextBlock Text="짧고 분명하게 발음할 수 있는 이름" Style="{StaticResource HelpText}" /><Button Content="내 목소리로 이름 맞추기" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="10,6" Style="{StaticResource SecondaryButton}" Click="NameTraining_Click" /></StackPanel>
                                     <StackPanel Grid.Column="2"><TextBlock Text="호출 방식" Style="{StaticResource FieldLabel}" /><ComboBox x:Name="ActivationInput" SelectedIndex="0"><ComboBoxItem Content="이름을 부르거나 단축키" Tag="voice" /><ComboBoxItem Content="단축키로만 호출" Tag="hotkey" /><ComboBoxItem Content="키를 누르는 동안만 듣기" Tag="hold" /></ComboBox><TextBlock x:Name="SettingsHotkeyHelp" Text="Ctrl + Shift + Space로 바로 말하기" Style="{StaticResource HelpText}" /></StackPanel>
                                 </Grid>
+                                <StackPanel x:Name="WakeWordsSection" Margin="0,18,0,0">
+                                    <TextBlock Text="별도 호출어 (선택)" Style="{StaticResource FieldLabel}" />
+                                    <TextBox x:Name="WakeWordsInput" Style="{StaticResource Field}" AcceptsReturn="True" MinHeight="76" MaxHeight="160" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="별도 호출어, 한 줄에 하나" />
+                                    <TextBlock Text="한 줄에 하나씩, 최대 32개 · 각 1–40자. 비워 두면 호출 이름과 학습한 발음을 사용합니다. 입력하면 이 목록으로만 호출하며, 이름 학습 결과는 목록을 비운 뒤 다시 사용합니다. ‘설정 저장’을 눌러 적용하세요." Style="{StaticResource HelpText}" TextWrapping="Wrap" />
+                                </StackPanel>
                                 <TextBlock Text="앱을 다시 실행할 때" Style="{StaticResource FieldLabel}" Margin="0,18,0,7" />
                                 <ComboBox x:Name="StartupListeningInput" SelectedIndex="0" AutomationProperties.Name="앱 실행 시 듣기"><ComboBoxItem Content="마지막 듣기 상태 복원" Tag="restore"/><ComboBoxItem Content="항상 듣기 시작" Tag="always"/><ComboBoxItem Content="항상 듣기 중지" Tag="off"/></ComboBox>
                                 <TextBlock Text="듣기 시작·중지 선택을 기억합니다. 답변을 읽거나 다른 앱이 마이크를 쓰는 동안 잠시 대기한 상태는 기억하지 않습니다. 처음 설치하거나 상태 기록이 없으면 직접 듣기를 시작하세요." Style="{StaticResource HelpText}" Margin="0,6,0,0"/>
@@ -262,7 +267,7 @@
                             <Expander Header="고급 음성 인식 설정" FontWeight="SemiBold" IsExpanded="False">
                                 <StackPanel Margin="0,18,0,0" TextElement.FontWeight="Normal">
                                     <CheckBox x:Name="KwsInput" Content="빠른 호출어 감지 사용" IsChecked="True" /><TextBlock Text="이름 호출 모드에서 전용 호출어 감지기를 함께 사용합니다." Style="{StaticResource HelpText}" Margin="0,7,0,17" />
-                                    <CheckBox x:Name="WakeHintsInput" Content="호출 이름을 인식 단서에 포함" /><TextBlock Text="이름 호출 모드의 받아쓰기에 현재 이름과 한글 발음을 단서로 넣습니다. 엉뚱한 말에서 이름이 들리면 끄세요." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,17" />
+                                    <CheckBox x:Name="WakeHintsInput" Content="호출어를 인식 단서에 포함" /><TextBlock Text="이름 호출 모드에서 별도 호출어 또는 현재 이름·한글 발음·학습한 발음을 단서로 넣습니다. 엉뚱한 말에서 호출어가 들리면 끄세요." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,17" />
                                     <TextBlock Text="인식 입력 증폭 · 0.25~20배" Style="{StaticResource FieldLabel}" />
                                     <TextBox x:Name="InputGainInput" Text="1" /><TextBlock Text="작게 들리는 목소리는 2~5배부터 조절하세요. 저장하면 이 앱의 인식에만 적용됩니다. 마이크 게이지는 원래 입력 크기를 보여 주며, 물리 음소거나 이미 깨진 소리는 복원하지 못합니다." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,17" />
                                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>

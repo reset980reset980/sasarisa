@@ -66,8 +66,7 @@ def make_asr(cfg):
         phrases, skipped = vocabulary_tokens(cfg.get("Text", {}).get("CustomWords", []))
         count = len(phrases)
         if cfg.get("WakeHints", False) and cfg.get("Activation", "voice") == "voice":
-            name = cfg.get("Name", "자비스").strip()
-            names, _ = vocabulary_tokens(list(dict.fromkeys([name, hangul_reading(name) or name])))
+            names, _ = vocabulary_tokens(wake_words(cfg))
             phrases = list(dict.fromkeys(phrases + names))
         if skipped:
             emit("warning", message=f"모델이 지원하지 않는 단어 {skipped}개는 인식 힌트에서 제외했어요.")
@@ -102,7 +101,19 @@ def make_asr(cfg):
                 pass
 
 
-def wake_pattern(cfg):
+def explicit_wakes(cfg):
+    words = cfg.get("WakeWords", [])
+    if not isinstance(words, list) or len(words) > 32:
+        raise ValueError("별도 호출어는 32개까지 입력할 수 있어요.")
+    for word in words:
+        if not isinstance(word, str) or not word.strip() or len(word) > 40 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in word) or not any(c.isalnum() for c in word):
+            raise ValueError("별도 호출어는 글자나 숫자를 포함해 1~40자로 입력하세요.")
+    return list(dict.fromkeys(words))
+
+
+def wake_words(cfg):
+    if words := explicit_wakes(cfg):
+        return words
     name = cfg.get("Name", "자비스").strip()
     h = hangul_reading(name) or name
     learned = cfg.get("LearnedWakes", {})
@@ -114,13 +125,19 @@ def wake_pattern(cfg):
     for word in aliases:
         if not isinstance(word, str) or len(word) > 40 or not 2 <= len(''.join(word.split())) <= 12 or not all(c.isalnum() or c == ' ' for c in word):
             raise ValueError("이름 보정은 2~12글자의 발음이어야 합니다.")
-    words = sorted(set(aliases + [name, h]), key=lambda word: len(''.join(word.split())), reverse=True)
+    return list(dict.fromkeys([name, h] + aliases))
+
+
+def wake_pattern(cfg):
+    words = sorted(wake_words(cfg), key=lambda word: len(''.join(word.split())), reverse=True)
     variants = [r"\s*".join(map(re.escape, ''.join(word.split()))) for word in words]
-    if h == "자비스":
-        variants += [r"재\s*비\s*스", "jarvis"]
-    sound = sound_alike(h)
-    if sound:
-        variants.append(sound)
+    if not explicit_wakes(cfg):
+        h = hangul_reading(cfg.get("Name", "자비스")) or cfg.get("Name", "자비스")
+        if h == "자비스":
+            variants += [r"재\s*비\s*스", "jarvis"]
+        sound = sound_alike(h)
+        if sound:
+            variants.append(sound)
     return re.compile(r"(?:헤이\s*|하이\s*|hey\s*)?(?:" + "|".join(variants) + ")", re.I)
 
 
@@ -134,7 +151,7 @@ def missed_name_audio(cfg, audio):
     Silence, a single click and non-periodic noise must not start repeated model work.
     The app still owns the name/command decision and cancellation.
     """
-    if not whisper_enabled(cfg) or cfg.get("Activation", "voice") != "voice" or not re.search(r"[a-z]", cfg.get("Name", "자비스"), re.I):
+    if not whisper_enabled(cfg) or cfg.get("Activation", "voice") != "voice" or not any(re.search(r"[a-z]", word, re.I) for word in wake_words(cfg)):
         return []
     voiced = [i for i, x in enumerate(audio) if len(x) >= 640 and np.isfinite(x).all()
               and float(np.sqrt(np.mean(x * x))) >= .003 and periodicity(x) >= .3]
@@ -148,22 +165,34 @@ def missed_name_audio(cfg, audio):
 class Recognizer:
     def __init__(self, cfg):
         self.cfg = cfg
+        self.wake = wake_pattern(cfg)  # Validate all phrases before loading native models.
         self.input_gain = float(cfg.get("InputGain", 1.0))
         if not np.isfinite(self.input_gain) or not .25 <= self.input_gain <= 20:
             raise ValueError("인식 입력 증폭은 0.25~20배로 설정하세요.")
         self.next_gain_warning = 0.
         self.asr, self.hint_count = make_asr(cfg)
-        name = cfg.get("Name", "자비스").strip()
-        h = hangul_reading(name) or name
-        self.wake = wake_pattern(cfg)
         self.kws = None
+        self.keyword_names = {}
         if cfg.get("Kws", True):
             keyword_path = None
             try:
-                line = encode_keyword(h, str(Path(model_files(True)["tokens"]).parent))
+                name = cfg.get("Name", "자비스").strip()
+                keywords = explicit_wakes(cfg) or [hangul_reading(name) or name]
+                lines, skipped = [], 0
+                for word in keywords:
+                    label = "wake_" + str(len(lines))
+                    try:
+                        lines.append(encode_keyword(word, str(Path(model_files(True)["tokens"]).parent), label))
+                        self.keyword_names[label] = word
+                    except ValueError:
+                        skipped += 1
+                if skipped:
+                    emit("warning", message=f"호출어 {skipped}개는 모델의 전용 감지 범위를 벗어나 받아쓰기 결과에서 확인합니다.")
+                if not lines:
+                    raise ValueError("전용 감지에 사용할 수 있는 호출어가 없어요.")
                 with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False) as f:
                     keyword_path = f.name
-                    f.write(line)
+                    f.writelines(lines)
                 self.kws = sherpa_onnx.KeywordSpotter(**model_files(True), keywords_file=keyword_path,
                     num_threads=int(cfg.get("Threads", 2)), keywords_score=2.0,
                     keywords_threshold=float(cfg.get("KeywordThreshold", .15)))
@@ -223,7 +252,7 @@ class Recognizer:
                     self.kws.reset_stream(self.ks)
                     if not self.woken:
                         self.woken = True
-                        emit("wake", name=result, utterance=self.sequence)
+                        emit("wake", name=self.keyword_names.get(result, result), utterance=self.sequence)
         if (self.cfg.get("Activation") != "hold" and self.asr.is_endpoint(self.s)) or len(self.audio) >= 300:
             if self.discarding:
                 # The decoder also has a 25-second length endpoint. Keep the

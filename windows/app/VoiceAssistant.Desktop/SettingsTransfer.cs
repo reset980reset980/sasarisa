@@ -99,6 +99,7 @@ public static class SettingsTransfer
         string Display(object? value) => value switch { bool flag => flag ? "켜짐" : "꺼짐", string[] words => words.Length == 0 ? "비어 있음" : string.Join(" / ", words), string str => str.Length == 0 ? "기본값 / 비어 있음" : str, _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "" };
         void Item(string label, object? oldValue, object? newValue) { var oldText = Display(oldValue); var newText = Display(newValue); if (oldText != newText) lines.Add($"{label}\n  {oldText}\n  → {newText}"); }
         Item("호출 이름", before.Name, after.Name); Item("호출 방식", Mode(before.Activation), Mode(after.Activation)); Item("입력 마이크", before.Device, after.Device);
+        Item("별도 호출어 (비우면 이름 사용)", string.Join(" / ", before.WakeWords), string.Join(" / ", after.WakeWords));
         string Startup(string mode) => mode switch { "always" => "항상 듣기 시작", "off" => "항상 듣기 중지", _ => "마지막 듣기 상태 복원" };
         Item("앱 실행 시 듣기", Startup(before.Desktop.StartupListening), Startup(after.Desktop.StartupListening));
         foreach (var name in before.LearnedWakes.Keys.Union(after.LearnedWakes.Keys).Order())

@@ -18,7 +18,7 @@ public static class LearnedNames
     public static bool Contains(string text, IEnumerable<string> words) => words.Any(word => Pattern(word).Length > 0 && Regex.IsMatch(text, Pattern(word), RegexOptions.IgnoreCase));
     public static string Strip(string text, UiSettings settings)
     {
-        var words = For(settings).Append(settings.Name).OrderByDescending(x => Squash(x).Length);
+        var words = WakePhrases.Active(settings).OrderByDescending(x => x.Count(c => !char.IsWhiteSpace(c)));
         var pattern = string.Join("|", words.Select(Pattern).Where(x => x.Length > 0));
         if (pattern.Length == 0) return text.Trim();
         return Regex.Replace(text.Trim(), @"^(?:(?:헤이|하이|hey)\s*)?(?:" + pattern + @")(?:[야아](?=\s|[~,.!?]|$))?[~,.!?\s]*", "", RegexOptions.IgnoreCase).Trim();

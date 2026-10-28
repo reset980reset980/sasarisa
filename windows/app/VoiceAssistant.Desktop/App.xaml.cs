@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--wake-phrase-app-only")) { Shutdown(WakePhraseAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--mac-settings-app-only")) { Shutdown(MacSettingsAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--speech-resync-app-only")) { Shutdown(RunSpeechResyncAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--browser-page-app-only")) { Shutdown(await RunBrowserPageAppChecksAsync(e.Args.Contains("--browser-edge"))); return; }
@@ -259,7 +260,7 @@ public partial class App : System.Windows.Application
                 input.ObserveReady(message);
                 automaticSpeechStart = false;
                 starting = false; listening = true; CaptureInput(ShouldCaptureSpeech());
-                window.AddMessage("system", settings.Activation == "voice" ? $"‘{settings.Name}’라고 부르거나 {HotkeyLabel}로 말하세요." : settings.Activation=="hold"?$"{HotkeyLabel}를 누른 동안만 말하세요. 키를 놓으면 처리해요.":$"{HotkeyLabel}로 부른 뒤 말하세요.");
+                window.AddMessage("system", settings.Activation == "voice" ? $"{WakePhrases.Cue(settings)} 또는 {HotkeyLabel}로 말하세요." : settings.Activation=="hold"?$"{HotkeyLabel}를 누른 동안만 말하세요. 키를 놓으면 처리해요.":$"{HotkeyLabel}로 부른 뒤 말하세요.");
                 if (message.TryGetProperty("hint_count", out var hints) && hints.GetInt32() > 0) window.AddMessage("system", $"자주 쓰는 단어 {hints.GetInt32()}개를 인식 힌트로 적용했어요.");
                 RefreshStatus(); break;
             case "capture": ObserveCapture(message); break;
@@ -281,7 +282,7 @@ public partial class App : System.Windows.Application
                 if (!speaking && !busy && listening)
                 {
                     var text = message.GetProperty("text").GetString() ?? "";
-                    window.SetPartial(text.Length == 0 ? "" : awakeUntil > DateTimeOffset.Now ? text : "들은 말: " + text + " · 이름을 부르거나 ‘지금 말하기’를 누르세요.");
+                    window.SetPartial(text.Length == 0 ? "" : awakeUntil > DateTimeOffset.Now ? text : "들은 말: " + text + " · 호출어를 말하거나 ‘지금 말하기’를 누르세요.");
                     if (awakeUntil > DateTimeOffset.Now) overlay.SetContent("듣고 있어요", text, false);
                 }
                 break;
@@ -624,7 +625,7 @@ public partial class App : System.Windows.Application
         if (!listening) { window.SetStatus("무엇을 도와드릴까요?", "아래에 명령을 입력하거나 ‘듣기 시작’을 누르세요.", false, false); return; }
         if (microphoneHealth.Quiet) { window.SetStatus("마이크에 소리가 거의 들어오지 않아요", "헤드셋의 음소거 버튼과 설정의 입력 장치를 확인하세요. 소리가 들어오면 안내가 사라집니다.", true, false, attention: true); return; }
         if(settings.Activation=="hold"){window.SetStatus(holding?"키를 누른 동안 듣고 있어요":"눌러서 말하기 대기",HotkeyLabel+"를 누른 채 말하고, 다 말하면 키를 놓으세요.",true,false);return;}
-        window.SetStatus(awakeUntil > DateTimeOffset.Now ? "말씀하세요" : "이름을 기다리고 있어요", settings.Activation == "voice" ? $"‘{settings.Name}’ 또는 {HotkeyLabel}로 부를 수 있어요." : $"{HotkeyLabel}로 부른 뒤 말씀하세요.", true, false);
+        window.SetStatus(awakeUntil > DateTimeOffset.Now ? "말씀하세요" : "호출을 기다리고 있어요", settings.Activation == "voice" ? $"{WakePhrases.Cue(settings)} 또는 {HotkeyLabel}로 부를 수 있어요." : $"{HotkeyLabel}로 부른 뒤 말씀하세요.", true, false);
     }
     string HotkeyLabel => hotkey.Length > 0 ? hotkey : "‘지금 말하기’ 버튼";
     async void Quit()

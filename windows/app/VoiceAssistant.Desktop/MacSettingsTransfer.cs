@@ -73,14 +73,9 @@ public static class MacSettingsTransfer
                 next.LearnedWakes = JsonSerializer.Deserialize<Dictionary<string, string[]>>(value.GetRawText()) ?? throw Invalid("learnedWakes");
             }
             var aliases = LearnedNames.For(next).ToList();
-            var wakes = Any("wakeWords") ? Words("wakeWords") : Array.Empty<string>();
-            if (wakes.Length == 0 && Any("assistantName", "wakeWords") && language.StartsWith("ko", StringComparison.Ordinal) && next.Name != "자비스") aliases.Add("자비스");
-            if (wakes.Length > 0)
-            {
-                var usable = wakes.Where(w => NameLearning.Usable(w, 2)).ToArray(); aliases.AddRange(usable);
-                notes.Add("별도 호출 문장은 이름 발음 보정으로 합칩니다. Windows에서는 설정한 호출 이름도 계속 사용할 수 있습니다.");
-                if (usable.Length != wakes.Length) notes.Add("Windows 발음 보정 범위를 벗어난 호출 문장 " + (wakes.Length - usable.Length) + "개는 제외했습니다.");
-            }
+            if (Any("wakeWords")) next.WakeWords = Words("wakeWords");
+            if (next.WakeWords.Length == 0 && Any("assistantName", "wakeWords") && language.StartsWith("ko", StringComparison.Ordinal) && next.Name != "자비스") aliases.Add("자비스");
+            if (next.WakeWords.Length > 0) notes.Add("별도 호출어 목록을 사용합니다. 호출 이름과 학습한 발음은 목록을 비운 뒤 다시 사용할 수 있습니다. 현재 인식 모델은 한국어입니다.");
             if (aliases.Count > 0) next.LearnedWakes[next.Name] = aliases.Distinct(StringComparer.Ordinal).ToArray();
             if (Any("brainProvider", "brainModel", "brainBaseURL", "claudeModel"))
             {

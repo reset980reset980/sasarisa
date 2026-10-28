@@ -36,7 +36,7 @@ internal static class MacSettingsChecks
             Require(JsonSerializer.Serialize(current) == before, "Current settings mutated");
             Require(value.Name == "코코" && value.Activation == "hold" && value.Desktop.UserName == "대표님" && value.Desktop.GreetingTitle == "COCO" && value.Desktop.GreetingSubtitle == "{assistant} 준비" && value.Desktop.GreetingStyle == "calm" && value.Desktop.OverlayPosition == "top" && value.Desktop.ShowIdleOrb, "Personalization lost");
             Require(value.SilenceSeconds == 1.7 && value.FollowUpSeconds == 45 && !value.PauseInCalls && value.BargeIn == "wake" && value.Text.PolishDictation && value.Text.RemoveFillers && value.Text.FillerWords.Length == 4 && value.Text.CustomWords.SequenceEqual(new[] { "특수명사" }), "Speech/text preferences lost");
-            Require(value.LearnedWakes["코코"].Contains("고고") && value.LearnedWakes["코코"].Contains("헤이 코코"), "Wake aliases lost");
+            Require(value.LearnedWakes["코코"].SequenceEqual(new[] { "고고" }) && value.WakeWords.SequenceEqual(new[] { "헤이 코코" }), "Explicit wakes or learned aliases lost");
             Require(value.Device == current.Device && value.VoiceId == current.VoiceId && value.OutputId == current.OutputId && value.SpeechRate == current.SpeechRate && value.SpeechVolume == current.SpeechVolume && value.ProjectDirectory == current.ProjectDirectory && value.WhisperUrl == current.WhisperUrl && value.Desktop.WakeHotkey == current.Desktop.WakeHotkey && value.Desktop.StartupListening == "off" && !value.ProRemote && value.GrowTogether == "off", "Mac platform/access settings changed local choices");
             Require(converted.Notices.Any(n => n.Contains("자유 모드")) && converted.Notices.Any(n => n.Contains("휴대폰")), "Excluded settings hidden");
         });
@@ -88,7 +88,7 @@ internal static class MacSettingsChecks
             var result = MacSettingsTransfer.Parse("{\"assistantName\":\"Sasarisa\",\"bootTitle\":\"M A C   B U T L E R\",\"wakeWords\":[]}", Current()).Settings;
             Require(result.Name == "Sasarisa" && result.Desktop.GreetingTitle == "" && result.LearnedWakes["Sasarisa"].Contains("자비스"), "Mac resolved defaults changed");
             var custom = MacSettingsTransfer.Parse("{\"wakeWords\":[\"코코\",\"음\"]}", Current());
-            Require(custom.Settings.LearnedWakes["윈도우"].Contains("코코") && !custom.Settings.LearnedWakes["윈도우"].Contains("음") && custom.Notices.Any(n => n.Contains("1개")), "Unsupported wake omission hidden");
+            Require(custom.Settings.WakeWords.SequenceEqual(new[] { "코코", "음" }) && !custom.Settings.LearnedWakes.ContainsKey("윈도우") && custom.Notices.Any(n => n.Contains("목록")), "Explicit wake list changed");
         });
         Check("Settings review now describes imported gain and name-hint changes", () =>
         {

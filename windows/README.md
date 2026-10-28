@@ -1,5 +1,7 @@
 # 자비스 · Windows
 
+0.2.41에서는 **설정 → 목소리로 시작하기 → 별도 호출어**에 한 줄에 하나씩 여러 호출 문장을 지정할 수 있습니다. 최대 32개, 각 1–40자이며 ‘설정 저장’으로 적용합니다. 목록이 있으면 이 호출어만 사용하고, 비우면 이름과 학습한 발음으로 돌아갑니다. ‘Mac 설정 가져오기’도 원본의 `wakeWords` 목록을 그대로 옮깁니다. 현재 인식 모델은 한국어이며 실제 발음·주변 소음에 따른 감지는 별도 확인이 필요합니다.
+
 Sasarisa를 바탕으로 만든 Windows 데스크톱 음성 비서입니다. macOS Swift 앱은 유지하고 Windows용 WPF 앱과 Python 음성 프로세스를 별도로 구현했습니다. 이 버전은 원본의 모든 외부 연동과 동작을 1:1로 재현한 버전은 아닙니다.
 
 Windows 개발은 `windows` 브랜치에서 진행합니다. 원본 기능의 전체 현황은 [이식 점검표](FEATURE_PARITY.md)를 확인하세요. 보고된 마이크 무반응 문제의 해결과 실제 회원 계정·휴대폰 연결 검증은 남아 있습니다.
@@ -110,7 +112,7 @@ Aside CLI는 [공식 Windows 설치·로그인 안내](https://docs.aside.com/he
 
 바탕화면 **자비스 Windows** 바로가기로 실행합니다. 기본 호출 이름은 **자비스**이며 설정에서 바꿀 수 있습니다.
 
-Windows 10/11 x64용 설치 파일은 `windows/dist/Sasarisa-Windows-0.2.40-x64.msi`입니다. 현재 사용자의 계정에 설치하며 Python과 .NET 실행 환경을 포함합니다. 별도 개발 도구는 필요하지 않습니다. 기본 위치는 `%LOCALAPPDATA%\SasarisaWindows`이고 시작 메뉴와 바탕화면에 바로가기를 만듭니다. 유튜브 창에는 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)이 필요합니다.
+Windows 10/11 x64용 설치 파일은 `windows/dist/Sasarisa-Windows-0.2.41-x64.msi`입니다. 현재 사용자의 계정에 설치하며 Python과 .NET 실행 환경을 포함합니다. 별도 개발 도구는 필요하지 않습니다. 기본 위치는 `%LOCALAPPDATA%\SasarisaWindows`이고 시작 메뉴와 바탕화면에 바로가기를 만듭니다. 유튜브 창에는 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)이 필요합니다.
 
 처음 설정의 **한국어 모델 받기 / 복구**에서 약 133 MB를 받습니다. 진행률·취소·재시도를 지원하며 모든 파일의 크기와 SHA-256을 확인한 뒤 적용합니다. 이미 받은 모델은 인터넷 없이 사용할 수 있습니다. 마이크는 **듣기 시작**을 누를 때 켜집니다. AI 대화는 선택한 제공자의 로그인·키 또는 로컬 모델이 별도로 필요합니다.
 

@@ -70,7 +70,8 @@ internal sealed class BargeInSession
     public bool Active { get; private set; }
     public bool Any { get; private set; }
     public string Mode { get; private set; } = "off";
-    string spoken = "", wake = "";
+    string spoken = "";
+    string[] wakes = Array.Empty<string>();
     public BargeInSession(Func<DateTimeOffset>? clock = null, double coupling = .12) => Echo = new(clock, coupling);
     public static bool Headphones(string name)
     {
@@ -85,16 +86,16 @@ internal sealed class BargeInSession
         for (var i = 0; i < 5; i++) { var match = Regex.Match(text.TrimStart(), pattern); if (!match.Success) break; text = match.Groups[1].Value.TrimStart(); }
         return text;
     }
-    public void Begin(string text, string name, string mode, string output)
+    public void Begin(string text, string name, string mode, string output, string[]? wakeWords = null)
     {
-        spoken = Squash(text); wake = Squash(name); Mode = mode;
+        spoken = Squash(text); wakes = (wakeWords ?? new[] { name }).Select(Squash).Where(x => x.Length > 0).ToArray(); Mode = mode;
         Any = mode == "any" || mode == "auto" && Headphones(output);
         Active = mode != "off"; if (Active) Echo.Begin();
     }
     public bool IsEcho(string text)
     {
         var value = Squash(text);
-        if (value.Length < 2 || spoken.Contains(value)) return true;
+        if (value.Length == 0 || value.Length < 2 && !wakes.Contains(value) || spoken.Contains(value)) return true;
         var letters = spoken.ToHashSet();
         return value.Length >= 4 && value.Count(letters.Contains) / (double)value.Length > .85;
     }
@@ -102,7 +103,7 @@ internal sealed class BargeInSession
     {
         if (!Active || IsEcho(text)) return false;
         var value = Squash(text);
-        return Any || hasWake || wake.Length > 0 && value.Contains(wake) ||
+        return Any || hasWake || wakes.Any(value.Contains) ||
             new[] { "멈춰", "그만", "스톱", "stop", "잠깐", "됐어" }.Any(value.StartsWith);
     }
     public bool Listen(double rms, double pitch)

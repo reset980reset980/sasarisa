@@ -104,7 +104,7 @@ def make_asr(a):
         enable_endpoint_detection=True, rule1_min_trailing_silence=2.4, rule2_min_trailing_silence=1.2, rule3_min_utterance_length=20)
 
 
-def encode_keyword(name, model):
+def encode_keyword(name, model, keyword_id=None):
     """Validate before native KWS: invalid tokens can terminate the worker process."""
     import sentencepiece as spm
     if not isinstance(name, str) or not name.strip() or len(name) > 60 or any(ord(c) < 32 or c in "@:#" for c in name):
@@ -116,7 +116,9 @@ def encode_keyword(name, model):
     if not pieces or any(piece == "<unk>" or piece not in vocabulary for piece in pieces):
         raise ValueError("모델이 지원하지 않는 글자가 호출 이름에 있어요. 다른 이름을 사용하거나 바로 말하기 단축키를 이용하세요.")
     # @ labels are whitespace-delimited; spaces here would become extra model tokens.
-    label = "".join(name.split())
+    if keyword_id is not None and not re.fullmatch(r"wake_[0-9]+", keyword_id):
+        raise ValueError("잘못된 호출어 식별자입니다.")
+    label = keyword_id if keyword_id is not None else "".join(name.split())
     return " ".join(pieces) + f" @{label}\n"
 
 

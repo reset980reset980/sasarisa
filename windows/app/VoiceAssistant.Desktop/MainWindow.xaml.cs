@@ -15,6 +15,7 @@ public sealed record UiSettings
 {
     public string Name { get; set; } = "자비스";
     public Dictionary<string, string[]> LearnedWakes { get; set; } = new();
+    public string[] WakeWords { get; set; } = Array.Empty<string>();
     public string Device { get; set; } = "";
     public string Activation { get; set; } = "voice";
     public double SilenceSeconds { get; set; } = 1.2;
@@ -177,6 +178,7 @@ public partial class MainWindow : Window
         _activation = settings.Activation;
         ApplyAssistantName(settings.Name);
         NameInput.Text = settings.Name;
+        WakeWordsInput.Text = string.Join(Environment.NewLine, settings.WakeWords);
         _selectedDevice = settings.Device;
         DeviceInput.SelectedValue = settings.Device;
         SelectTag(ActivationInput, settings.Activation);
@@ -358,6 +360,9 @@ public partial class MainWindow : Window
     {
         var speech=ReadSpeechOptions();if(speech==null)return;
         if (string.IsNullOrWhiteSpace(NameInput.Text) || NameInput.Text.Trim().Length > 20) { SettingsError("호출 이름은 1–20자로 입력해 주세요.", NameInput); return; }
+        string[] wakeWords;
+        try { wakeWords = WakePhrases.ReadInput(WakeWordsInput.Text); }
+        catch (ArgumentException ex) { SettingsError(ex.Message, WakeWordsInput); return; }
         if (!TryNumber(SilenceInput.Text, 0.4, 3, out double silence)) { SettingsError("말 끝 대기 시간은 0.4–3초로 입력해 주세요.", SilenceInput); return; }
         if (!TryNumber(FollowUpInput.Text, 5, 120, out double followUp)) { SettingsError("후속 대화 유지 시간은 5–120초로 입력해 주세요.", FollowUpInput); return; }
         if (!int.TryParse(ThreadsInput.Text, out int threads) || threads < 1 || threads > 8) { SettingsError("인식 처리 스레드는 1–8 사이의 정수로 입력해 주세요.", ThreadsInput); return; }
@@ -378,6 +383,7 @@ public partial class MainWindow : Window
         var settings = _loadedSettings with
         {
             Name = NameInput.Text.Trim(),
+            WakeWords = wakeWords,
             LearnedWakes = new(_loadedSettings.LearnedWakes),
             Device = (DeviceInput.SelectedItem as DeviceOption)?.Id ?? _selectedDevice,
             Activation = SelectedTag(ActivationInput),

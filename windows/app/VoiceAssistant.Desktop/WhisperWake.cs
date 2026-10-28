@@ -16,18 +16,17 @@ internal static class WhisperWake
     }
     public static bool Candidate(UiSettings options, string text, double seconds)
     {
-        if (options.Activation != "voice" || !WhisperEngine.Enabled(options) || string.IsNullOrWhiteSpace(options.Name) ||
+        var names = WakePhrases.Active(options);
+        if (options.Activation != "voice" || !WhisperEngine.Enabled(options) || names.Length == 0 ||
             !double.IsFinite(seconds) || seconds <= .5 || seconds >= 4.5 || text.Length > 200 || LearnedNames.Squash(text).Length > 24) return false;
-        if (string.IsNullOrWhiteSpace(text)) return Regex.IsMatch(options.Name, "[a-z]", RegexOptions.IgnoreCase);
-        var name = Onset(NameLearning.HangulReading(options.Name) ?? options.Name); var heard = Onset(text);
-        return name == null || heard == null || name == heard;
+        if (string.IsNullOrWhiteSpace(text)) return names.Any(name => Regex.IsMatch(name, "[a-z]", RegexOptions.IgnoreCase));
+        var heard = Onset(text);
+        return names.Any(name => Onset(NameLearning.HangulReading(name) ?? name) is not { } onset || heard == null || onset == heard);
     }
-    static string[] Names(UiSettings options) => LearnedNames.For(options).Append(options.Name)
-        .Append(NameLearning.HangulReading(options.Name) ?? options.Name).Where(x => !string.IsNullOrWhiteSpace(x))
-        .Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(x => LearnedNames.Squash(x).Length).ToArray();
+    static string[] Names(UiSettings options) => WakePhrases.Active(options).OrderByDescending(x => x.Count(c => !char.IsWhiteSpace(c))).ToArray();
     internal static UiSettings WithPrompt(UiSettings options)
     {
-        var names = new[] { options.Name, NameLearning.HangulReading(options.Name) ?? options.Name };
+        var names = WakePhrases.Active(options);
         return options with { Text = options.Text with { CustomWords = names.Concat(options.Text.CustomWords).Distinct(StringComparer.OrdinalIgnoreCase).Take(150).ToArray() } };
     }
     static string? Remainder(string text, UiSettings options)
