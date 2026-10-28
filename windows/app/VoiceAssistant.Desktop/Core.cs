@@ -59,6 +59,7 @@ public static class SettingsStore
         if (s.FollowUpSeconds < 5 || s.FollowUpSeconds > 120 || !double.IsFinite(s.FollowUpSeconds)) throw new ArgumentException("대화 유지 시간은 5~120초입니다.");
         if (s.Threads < 1 || s.Threads > 8) throw new ArgumentException("처리 스레드는 1~8개입니다.");
         if (s.KeywordThreshold < 0.01 || s.KeywordThreshold > 0.9 || !double.IsFinite(s.KeywordThreshold)) throw new ArgumentException("이름 감지 임계값은 0.01~0.9입니다.");
+        if (!double.IsFinite(s.InputGain) || s.InputGain < .25 || s.InputGain > 20) throw new ArgumentException("인식 입력 증폭은 0.25~20배입니다.");
         if (s.BrainProvider is not ("claude" or "codex" or "ollama" or "aside" or "combo") && ApiProviders.Find(s.BrainProvider) == null) throw new ArgumentException("AI 종류를 확인하세요.");
         if (s.BrainProvider == "ollama") ValidateLocalUrl(s.BrainUrl);
         if (ApiProviders.Find(s.BrainProvider) != null) ApiProviders.Endpoint(s.BrainProvider, s.BrainUrl);

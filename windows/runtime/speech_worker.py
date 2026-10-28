@@ -64,6 +64,11 @@ def make_asr(cfg):
     count = 0
     try:
         phrases, skipped = vocabulary_tokens(cfg.get("Text", {}).get("CustomWords", []))
+        count = len(phrases)
+        if cfg.get("WakeHints", False) and cfg.get("Activation", "voice") == "voice":
+            name = cfg.get("Name", "자비스").strip()
+            names, _ = vocabulary_tokens(list(dict.fromkeys([name, hangul_reading(name) or name])))
+            phrases = list(dict.fromkeys(phrases + names))
         if skipped:
             emit("warning", message=f"모델이 지원하지 않는 단어 {skipped}개는 인식 힌트에서 제외했어요.")
         if phrases:
@@ -78,7 +83,6 @@ def make_asr(cfg):
                 f.write("\n".join(phrases) + "\n")
             options.update(decoding_method="modified_beam_search", hotwords_file=keyword_path,
                 hotwords_score=1.5, max_active_paths=4, modeling_unit="bpe", bpe_vocab=vocab_path)
-            count = len(phrases)
         return sherpa_onnx.OnlineRecognizer.from_transducer(**options), count
     except Exception as ex:
         if keyword_path is None:
@@ -144,6 +148,10 @@ def missed_name_audio(cfg, audio):
 class Recognizer:
     def __init__(self, cfg):
         self.cfg = cfg
+        self.input_gain = float(cfg.get("InputGain", 1.0))
+        if not np.isfinite(self.input_gain) or not .25 <= self.input_gain <= 20:
+            raise ValueError("인식 입력 증폭은 0.25~20배로 설정하세요.")
+        self.next_gain_warning = 0.
         self.asr, self.hint_count = make_asr(cfg)
         name = cfg.get("Name", "자비스").strip()
         h = hangul_reading(name) or name
@@ -179,6 +187,14 @@ class Recognizer:
 
     def feed(self, x):
         started = time.perf_counter()
+        # Keep the capture meter/echo measurements raw. Apply once on entry to
+        # recognition, including pre-roll replay and optional Whisper audio.
+        if self.input_gain != 1:
+            scaled = x * self.input_gain
+            if self.input_gain > 1 and np.count_nonzero(np.abs(scaled) > 1) > len(scaled) * .01 and time.monotonic() >= self.next_gain_warning:
+                self.next_gain_warning = time.monotonic() + 10
+                emit("warning", message="인식 입력 증폭이 커서 소리 일부가 잘리고 있어요. 설정에서 증폭 배수를 낮춰 주세요.")
+            x = np.clip(scaled, -1., 1.).astype(np.float32)
         self.audio.append(x)
         self.s.accept_waveform(SR, x)
         while self.asr.is_ready(self.s):

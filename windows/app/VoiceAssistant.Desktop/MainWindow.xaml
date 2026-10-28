@@ -262,6 +262,9 @@
                             <Expander Header="고급 음성 인식 설정" FontWeight="SemiBold" IsExpanded="False">
                                 <StackPanel Margin="0,18,0,0" TextElement.FontWeight="Normal">
                                     <CheckBox x:Name="KwsInput" Content="빠른 호출어 감지 사용" IsChecked="True" /><TextBlock Text="이름 호출 모드에서 전용 호출어 감지기를 함께 사용합니다." Style="{StaticResource HelpText}" Margin="0,7,0,17" />
+                                    <CheckBox x:Name="WakeHintsInput" Content="호출 이름을 인식 단서에 포함" /><TextBlock Text="이름 호출 모드의 받아쓰기에 현재 이름과 한글 발음을 단서로 넣습니다. 엉뚱한 말에서 이름이 들리면 끄세요." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,17" />
+                                    <TextBlock Text="인식 입력 증폭 · 0.25~20배" Style="{StaticResource FieldLabel}" />
+                                    <TextBox x:Name="InputGainInput" Text="1" /><TextBlock Text="작게 들리는 목소리는 2~5배부터 조절하세요. 저장하면 이 앱의 인식에만 적용됩니다. 마이크 게이지는 원래 입력 크기를 보여 주며, 물리 음소거나 이미 깨진 소리는 복원하지 못합니다." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,17" />
                                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                         <StackPanel><TextBlock Text="호출어 감지 기준" Style="{StaticResource FieldLabel}" /><TextBox x:Name="ThresholdInput" Text="0.15" Style="{StaticResource Field}" /><TextBlock Text="낮을수록 민감하게 감지합니다 · 0.01–0.9" Style="{StaticResource HelpText}" /></StackPanel>
                                         <StackPanel Grid.Column="2"><TextBlock Text="인식 처리 스레드" Style="{StaticResource FieldLabel}" /><TextBox x:Name="ThreadsInput" Text="2" Style="{StaticResource Field}" /><TextBlock Text="CPU 사용량과 속도 조절 · 1–8" Style="{StaticResource HelpText}" /></StackPanel>

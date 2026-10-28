@@ -21,6 +21,8 @@ public sealed record UiSettings
     public double FollowUpSeconds { get; set; } = 30;
     public int Threads { get; set; } = 2;
     public bool Kws { get; set; } = true;
+    public bool WakeHints { get; set; }
+    public double InputGain { get; set; } = 1;
     public double KeywordThreshold { get; set; } = 0.15;
     public bool Speak { get; set; } = true;
     public bool ProRemote { get; set; }
@@ -182,6 +184,8 @@ public partial class MainWindow : Window
         FollowUpInput.Text = settings.FollowUpSeconds.ToString("0.##", CultureInfo.InvariantCulture);
         ThreadsInput.Text = settings.Threads.ToString(CultureInfo.InvariantCulture);
         KwsInput.IsChecked = settings.Kws;
+        WakeHintsInput.IsChecked = settings.WakeHints;
+        InputGainInput.Text = settings.InputGain.ToString("0.##", CultureInfo.InvariantCulture);
         ThresholdInput.Text = settings.KeywordThreshold.ToString("0.###", CultureInfo.InvariantCulture);
         SpeakInput.IsChecked = settings.Speak;
         ProRemoteInput.IsChecked = settings.ProRemote;
@@ -358,6 +362,7 @@ public partial class MainWindow : Window
         if (!TryNumber(FollowUpInput.Text, 5, 120, out double followUp)) { SettingsError("후속 대화 유지 시간은 5–120초로 입력해 주세요.", FollowUpInput); return; }
         if (!int.TryParse(ThreadsInput.Text, out int threads) || threads < 1 || threads > 8) { SettingsError("인식 처리 스레드는 1–8 사이의 정수로 입력해 주세요.", ThreadsInput); return; }
         if (!TryNumber(ThresholdInput.Text, 0.01, 0.9, out double threshold)) { SettingsError("호출어 감지 기준은 0.01–0.9로 입력해 주세요.", ThresholdInput); return; }
+        if (!TryNumber(InputGainInput.Text, .25, 20, out double inputGain)) { SettingsError("인식 입력 증폭은 0.25~20배로 입력해 주세요.", InputGainInput); return; }
         if (SelectedTag(ProviderInput) == "ollama" && !IsLocalHttpUrl(BrainUrlInput.Text)) { SettingsError("Ollama는 http://127.0.0.1:포트 형식의 로컬 주소를 입력해 주세요.", BrainUrlInput); return; }
         if (!string.IsNullOrWhiteSpace(WhisperUrlInput.Text) && !IsLocalHttpUrl(WhisperUrlInput.Text)) { SettingsError("Whisper는 http://127.0.0.1:포트 형식의 로컬 주소를 입력해 주세요.", WhisperUrlInput); return; }
         try { if (ApiProviders.Find(SelectedTag(ProviderInput)) != null) ApiProviders.Endpoint(SelectedTag(ProviderInput), BrainUrlInput.Text); }
@@ -380,6 +385,8 @@ public partial class MainWindow : Window
             FollowUpSeconds = followUp,
             Threads = threads,
             Kws = KwsInput.IsChecked == true,
+            WakeHints = WakeHintsInput.IsChecked == true,
+            InputGain = inputGain,
             KeywordThreshold = threshold,
             Speak = SpeakInput.IsChecked == true,
             ProRemote = ProRemoteInput.IsChecked == true,
