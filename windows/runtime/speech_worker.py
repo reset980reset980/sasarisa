@@ -184,6 +184,13 @@ class Recognizer:
         self.text, self.woken, self.audio = "", False, []
         self.sequence += 1
         self.started = time.perf_counter()
+        self.discarding = False
+
+    def resync(self, lag=0):
+        # A missing beginning cannot be reconstructed from a command's tail.
+        self.reset()
+        self.discarding = True
+        emit("resync", utterance=self.sequence, lag_ms=round(max(0, lag) * 1000))
 
     def feed(self, x):
         started = time.perf_counter()
@@ -202,12 +209,13 @@ class Recognizer:
         text = self.asr.get_result(self.s).strip()
         if text != self.text:
             self.text = text
-            emit("partial", text=text, utterance=self.sequence,
-                 has_wake=self.woken or bool(self.wake.search(text)))
-        if not self.woken and (match := self.wake.search(text)):
+            if not self.discarding:
+                emit("partial", text=text, utterance=self.sequence,
+                     has_wake=self.woken or bool(self.wake.search(text)))
+        if not self.discarding and not self.woken and (match := self.wake.search(text)):
             self.woken = True
             emit("wake", name=match.group(), utterance=self.sequence)
-        if self.kws:
+        if self.kws and not self.discarding:
             self.ks.accept_waveform(SR, x)
             while self.kws.is_ready(self.ks):
                 self.kws.decode_stream(self.ks)
@@ -217,10 +225,20 @@ class Recognizer:
                         self.woken = True
                         emit("wake", name=result, utterance=self.sequence)
         if (self.cfg.get("Activation") != "hold" and self.asr.is_endpoint(self.s)) or len(self.audio) >= 300:
-            self.finish()
+            if self.discarding:
+                # The decoder also has a 25-second length endpoint. Keep the
+                # quarantine across that boundary; a short endpoint is needed.
+                long_segment = sum(len(x) for x in self.audio) >= SR * 25
+                self.reset()
+                self.discarding = long_segment
+            else:
+                self.finish()
         return time.perf_counter() - started
 
     def finish(self):
+        if self.discarding:
+            self.reset()
+            return
         audio = self.audio if self.text else missed_name_audio(self.cfg, self.audio)
         if self.text or audio:
             match = self.wake.search(self.text)
@@ -238,7 +256,7 @@ class Recognizer:
         self.reset()
 
     def finish_held(self):
-        if self.audio:
+        if self.audio and not self.discarding:
             # Flush the decoder's lookahead so releasing the key does not lose
             # the last syllable. This padding is not included in the audio sent
             # to optional Whisper refinement.
@@ -305,11 +323,15 @@ def main():
             stopped.set()
 
     def callback(data, frames, timing, status):
+        packet = (data[:, 0].copy(), str(status) if status else "", time.monotonic())
         try:
-            audio.put_nowait((data[:, 0].copy(), str(status) if status else "", time.monotonic()))
+            audio.put_nowait(packet)
         except queue.Full:
-            # A bounded queue prevents minutes-old audio from running commands.
-            pass
+            # Retain the newest samples when the decoder falls behind.
+            try: audio.get_nowait()
+            except queue.Empty: pass
+            try: audio.put_nowait(packet)
+            except queue.Full: pass
 
     threading.Thread(target=control_reader, daemon=True).start()
     device = cfg.get("Device", "")
@@ -347,7 +369,9 @@ def main():
                         except queue.Empty: break
                     emit("capture", enabled=capture, request=msg.get("request", 0), utterance=recognizer.sequence)
                 if msg.get("type") == "barge":
+                    discarding = getattr(recognizer, "discarding", False)
                     recognizer.reset()
+                    recognizer.discarding = discarding
                     emit("barge", accepted=capture, utterance=recognizer.sequence)
                     if capture:
                         for pending in pre_roll.recent(time.monotonic()):
@@ -358,12 +382,18 @@ def main():
             except queue.Empty:
                 continue
             now = time.monotonic()
-            if audio.qsize() > 15:
+            lag = max(0, now - captured_at)
+            if audio.qsize() > 15 or lag >= 1.5:
+                # Also discard x: it was removed before draining and is older
+                # than everything left in the queue.
                 while audio.qsize() > 2:
                     audio.get_nowait()
-                recognizer.reset()
+                recognizer.resync(lag)
                 pre_roll.clear()
-                emit("warning", message="음성 처리가 밀려 오래된 소리를 비웠어요. 처리 스레드나 인식 설정을 조절하세요.")
+                emit("warning", message="음성 처리가 밀려 일부 소리를 놓쳤어요. 이번 문장은 실행하지 않아요. 잠깐 쉬었다가 이름을 다시 부르거나 ‘지금 말하기’를 누른 뒤 말씀해 주세요.")
+                try: x, status, captured_at = audio.get_nowait()
+                except queue.Empty: continue
+                if now - captured_at >= 1.5: continue
             if status and now - last_warning > 5:
                 last_warning = now
                 emit("warning", message="마이크 입력 상태: " + status)

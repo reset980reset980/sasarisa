@@ -23,7 +23,7 @@ class InputTuningChecks(unittest.TestCase):
         for gain in [.25, 1, 10, 20]:
             decoder = worker.Recognizer.__new__(worker.Recognizer)
             decoder.cfg = {}; decoder.input_gain = gain; decoder.asr = Asr(); decoder.s = decoder.asr
-            decoder.audio = []; decoder.text = ''; decoder.woken = False; decoder.kws = None; decoder.wake = re.compile('name')
+            decoder.audio = []; decoder.text = ''; decoder.woken = False; decoder.kws = None; decoder.wake = re.compile('name'); decoder.discarding = False
             original = np.array([-.8, -.01, 0, .01, .8], dtype=np.float32); untouched = original.copy()
             with patch.object(worker, 'emit') as warning:
                 decoder.next_gain_warning = 0

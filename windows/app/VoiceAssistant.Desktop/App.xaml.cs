@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--speech-resync-app-only")) { Shutdown(RunSpeechResyncAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--browser-page-app-only")) { Shutdown(await RunBrowserPageAppChecksAsync(e.Args.Contains("--browser-edge"))); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-tuning-app-only")) { Shutdown(RunInputTuningAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--aside-phone-app-only")) { Shutdown(await RunAsidePhoneAppChecksAsync(e.Args.Contains("--aside-internet"), e.Args.Contains("--aside-native"))); return; }
@@ -248,6 +249,7 @@ public partial class App : System.Windows.Application
     {
         if (closing) return;
         var type = message.GetProperty("type").GetString();
+        if (type is "wake" or "partial" && message.TryGetProperty("utterance", out var sequence) && sequence.GetInt32() <= lastUtterance) return;
         if (microphonePause.Blocked && type is "wake" or "partial" or "final" or "level") return;
         if ((speechCapturePending || waitingBarge || DateTimeOffset.UtcNow < speechTailUntil) && type is "wake" or "partial" or "final") return;
         switch (type)
@@ -260,6 +262,11 @@ public partial class App : System.Windows.Application
                 if (message.TryGetProperty("hint_count", out var hints) && hints.GetInt32() > 0) window.AddMessage("system", $"자주 쓰는 단어 {hints.GetInt32()}개를 인식 힌트로 적용했어요.");
                 RefreshStatus(); break;
             case "capture": ObserveCapture(message); break;
+            case "resync":
+                CancelWakeCheck();
+                lastUtterance = Math.Max(lastUtterance, message.GetProperty("utterance").GetInt32());
+                if (!holding && !dictating && !busy && !speaking) awakeUntil = DateTimeOffset.MinValue;
+                window.SetPartial(""); AppPaths.Log("speech-resync", "lag_ms=" + (message.TryGetProperty("lag_ms", out var lag) ? lag.GetInt64().ToString() : "unknown") + "; discarded incomplete audio; waiting for a clean utterance"); RefreshStatus(); break;
             case "barge":
                 waitingBarge = false;
                 lastUtterance = Math.Max(lastUtterance, message.GetProperty("utterance").GetInt32() - 1);

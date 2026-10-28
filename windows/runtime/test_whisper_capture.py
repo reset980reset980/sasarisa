@@ -12,7 +12,7 @@ import speech_worker as worker
 class WhisperCaptureChecks(unittest.TestCase):
     def silent_take(self, settings, chunks):
         decoder = object.__new__(worker.Recognizer)
-        decoder.cfg = settings; decoder.text = ''; decoder.wake = re.compile('사사리사')
+        decoder.cfg = settings; decoder.text = ''; decoder.wake = re.compile('사사리사'); decoder.discarding = False
         decoder.woken = False; decoder.sequence = 11; decoder.audio = chunks
         decoder.reset = lambda: None
         events = []
@@ -23,6 +23,7 @@ class WhisperCaptureChecks(unittest.TestCase):
     def finish(self, settings):
         decoder = object.__new__(worker.Recognizer)
         decoder.cfg = settings
+        decoder.discarding = False
         decoder.text = '자비스 지금 몇 시야'
         decoder.wake = re.compile('자비스')
         decoder.woken = True
