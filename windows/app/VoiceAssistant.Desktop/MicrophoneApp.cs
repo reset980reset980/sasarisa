@@ -37,7 +37,7 @@ public partial class App
     void CheckSpeechCaptureState()
     {
         if (closing || starting || !listening) return;
-        var repair = speechCaptureState.Check(ShouldCaptureSpeech() && !microphonePause.Blocked && DateTimeOffset.UtcNow >= speechTailUntil);
+        var repair = speechCaptureState.Check(ShouldCaptureSpeech() && !waitingBarge && !microphonePause.Blocked && DateTimeOffset.UtcNow >= speechTailUntil);
         if (repair == CaptureRepair.Resend)
         {
             AppPaths.Log("speech-capture-repair", "resend enable; request=" + input.CaptureRequest);

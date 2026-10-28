@@ -67,16 +67,17 @@ public partial class App
                 var current = input.CaptureRequest; Level(old, false); now += TimeSpan.FromSeconds(5); CheckSpeechCaptureState(); Require(input.CaptureRequest == current, "Old paused frame reset current input");
                 Level(current, false); now += TimeSpan.FromSeconds(2); CheckSpeechCaptureState(); Require(input.CaptureRequest == current + 1 && speechCapturePending, "Current paused decoder was not repaired");
             });
-            Check("Actual App never resumes a stopped microphone intentional hold idle AI work call pause or speech tail", () =>
+            Check("Actual App never overrides stopped input intentional hold AI work call pause speech tail or pending barge acknowledgement", () =>
             {
-                foreach (var pause in new[] { "stopped", "hold", "busy", "call", "tail" })
+                foreach (var pause in new[] { "stopped", "hold", "busy", "call", "tail", "barge" })
                 {
                     Reset(pause == "hold" ? "hold" : "voice"); CaptureInput(true);
                     if (pause == "stopped") StopInput();
                     if (pause == "busy") busy = true;
                     if (pause == "call") { microphonePause.Enabled = true; microphonePause.Observe(new(true, new[] { new MicrophoneUser(999999, "fixture call") }, 1, DateTimeOffset.UtcNow)); }
                     if (pause == "tail") speechTailUntil = DateTimeOffset.UtcNow.AddSeconds(30);
-                    if (pause != "stopped") CaptureInput(false);
+                    if (pause == "barge") { Ack(input.CaptureRequest, true); waitingBarge = true; Level(input.CaptureRequest, false); }
+                    if (pause is not ("stopped" or "barge")) CaptureInput(false);
                     if (pause == "hold")
                     {
                         Ack(input.CaptureRequest, true);
