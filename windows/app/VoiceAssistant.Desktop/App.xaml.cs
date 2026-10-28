@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--codex-effort-app-only")) { Shutdown(CodexEffortAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--wake-phrase-app-only")) { Shutdown(WakePhraseAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--mac-settings-app-only")) { Shutdown(MacSettingsAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--speech-resync-app-only")) { Shutdown(RunSpeechResyncAppChecks()); return; }

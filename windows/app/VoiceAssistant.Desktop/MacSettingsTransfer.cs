@@ -91,6 +91,8 @@ public static class MacSettingsTransfer
                 next.ProviderProfiles[provider] = new(model, url);
                 if (provider != "claude" && Any("claudeModel")) next.ProviderProfiles["claude"] = new(Text(root, "claudeModel"), "");
             }
+            String("brainEffort", v => next.BrainEffort = v);
+            if (Any("brainEffort")) notes.Add("생각 깊이는 Windows에서도 Codex 요청에만 적용합니다. AI 연결 가져오기를 선택해야 반영합니다.");
             if (Any("tts"))
             {
                 var provider = Text(root, "tts") is "say" ? "windows" : Text(root, "tts");
@@ -113,7 +115,7 @@ public static class MacSettingsTransfer
             }
             else if (Any("ttsVoice", "ttsModel", "ttsRegion", "ttsURL", "elevenLabs")) notes.Add("음성 제공자 항목이 없어 외부 목소리 설정은 현재 Windows 값을 유지합니다.");
             if (Any("whisperModel", "whisperServer")) notes.Add("Mac의 Whisper 모델·실행 경로는 제외했습니다. 현재 Windows 보정 엔진 선택을 유지합니다.");
-            if (Any("freeMode", "freeModeAsked", "brainAccess", "confirmDelegate", "previewBeforeSend", "brainEffort")) notes.Add("작업 권한·자유 모드·위임 확인·사고 강도는 현재 Windows 동작을 유지합니다.");
+            if (Any("freeMode", "freeModeAsked", "brainAccess", "confirmDelegate", "previewBeforeSend")) notes.Add("작업 권한·자유 모드·위임 확인은 현재 Windows 동작을 유지합니다.");
             if (Any("proRemote", "growTogether")) notes.Add("휴대폰 원격 접근과 표현 공유 참여 여부는 현재 Windows 선택을 유지합니다.");
             if (Any("sayVoice", "sayRate", "browserApp", "apps")) notes.Add("Apple 목소리·읽기 속도·Mac 브라우저·앱 별칭은 제외했습니다. Windows에서 다시 선택하세요.");
             if (Any("maxUtteranceSec", "chime", "router", "keepAudio")) notes.Add("연속 발화 길이·알림음·빠른 분류기·음성 보관 설정은 현재 Windows 동작을 유지합니다.");

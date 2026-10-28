@@ -38,6 +38,7 @@ public sealed record UiSettings
     public VoicePreferences Tts { get; set; } = new();
     public string BrainProvider { get; set; } = "claude";
     public string BrainModel { get; set; } = "";
+    public string BrainEffort { get; set; } = "low";
     public string BrainUrl { get; set; } = "http://127.0.0.1:11434";
     public Dictionary<string, ProviderPreferences> ProviderProfiles { get; set; } = new();
     public string ProjectDirectory { get; set; } = "";
@@ -204,6 +205,7 @@ public partial class MainWindow : Window
         _providerProfiles = new(settings.ProviderProfiles);
         SelectTag(ProviderInput, settings.BrainProvider);
         ModelInput.Text = settings.BrainModel;
+        SelectTag(CodexEffortInput, settings.BrainEffort);
         BrainUrlInput.Text = ApiProviders.Find(settings.BrainProvider) is { EditableUrl: false } api ? api.BaseUrl : settings.BrainUrl;
         _draftProvider = settings.BrainProvider;
         ApiKeyInput.Clear();
@@ -374,6 +376,8 @@ public partial class MainWindow : Window
         catch (ArgumentException ex) { SettingsError(ex.Message, BrainUrlInput); return; }
         if (ApiKeyInput.Password.Length > 0) { SettingsError("입력한 API 키를 먼저 ‘키 저장’으로 보관하세요.", ApiKeyInput); return; }
         StoreProviderDraft();
+        try { _ = CodexEffort.Label(SelectedTag(CodexEffortInput)); }
+        catch (ArgumentException ex) { SettingsError(ex.Message, CodexEffortInput); return; }
         DesktopPreferences desktop;
         TextPreferences textPreferences;
         try { desktop = ReadDesktopPreferences(); desktop.Validate(SelectedTag(ActivationInput)); }
@@ -403,6 +407,7 @@ public partial class MainWindow : Window
             VoiceId=speech.VoiceId, OutputId=speech.OutputId, SpeechRate=speech.SpeechRate, SpeechVolume=speech.SpeechVolume,Tts=speech.Tts,
             BrainProvider = SelectedTag(ProviderInput),
             BrainModel = ModelInput.Text.Trim(),
+            BrainEffort = SelectedTag(CodexEffortInput),
             BrainUrl = BrainUrlInput.Text.Trim(),
             ProviderProfiles = new(_providerProfiles),
             ProjectDirectory = ProjectDirectoryInput.Text.Trim(),

@@ -13,6 +13,8 @@ namespace VoiceAssistant.Desktop;
 
 public sealed partial class Brain
 {
+    internal static readonly TimeSpan CodexResponseLimit = TimeSpan.FromSeconds(180);
+
     public static string? CodexBinary()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -32,7 +34,7 @@ public sealed partial class Brain
     internal static ProcessStartInfo CodexInfo(string binary, string schemaFile, UiSettings settings)
     {
         var info = new ProcessStartInfo(binary) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = Path.Combine(AppPaths.Home, "work") };
-        foreach (var arg in new[] { "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "--sandbox", "read-only", "--color", "never", "--output-schema", schemaFile, "-c", "approval_policy=\"never\"", "-c", "model_reasoning_effort=\"low\"", "-c", "project_doc_max_bytes=0", "-c", "web_search=\"disabled\"" }) info.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "--sandbox", "read-only", "--color", "never", "--output-schema", schemaFile, "-c", "approval_policy=\"never\"", "-c", CodexEffort.Argument(settings.BrainEffort), "-c", "project_doc_max_bytes=0", "-c", "web_search=\"disabled\"" }) info.ArgumentList.Add(arg);
         foreach (var feature in new[] { "shell_tool", "unified_exec", "apps", "browser_use", "browser_use_external", "computer_use", "image_generation", "plugins", "multi_agent", "hooks", "goals", "tool_suggest", "skill_mcp_dependency_install", "skill_search", "memories", "view_image" }) { info.ArgumentList.Add("--disable"); info.ArgumentList.Add(feature); }
         info.ArgumentList.Add("--enable"); info.ArgumentList.Add("skip_host_skill_discovery");
         if (!string.IsNullOrWhiteSpace(settings.BrainModel)) { info.ArgumentList.Add("--model"); info.ArgumentList.Add(settings.BrainModel); }
@@ -50,16 +52,38 @@ public sealed partial class Brain
         try
         {
             var info = CodexInfo(binary, schemaFile, settings); mcp?.ConfigureCodex(info);
-            using var process = new Process { StartInfo = info }; process.Start();
-            var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(120));
-            try { await process.StandardInput.WriteAsync(prompt); process.StandardInput.Close(); await process.WaitForExitAsync(timeout.Token); }
-            catch { if (!process.HasExited) process.Kill(true); throw; }
-            var stdout = await output; var stderr = await error;
+            using var process = new Process { StartInfo = info };
+            var (stdout, stderr) = await RunCodexProcessAsync(process, prompt, token);
             if (process.ExitCode != 0) throw new InvalidOperationException("Codex 연결 실패: " + Short(stderr.Length > 0 ? stderr : stdout));
             return DecodeCodexEvents(stdout);
         }
         finally { if (File.Exists(schemaFile)) File.Delete(schemaFile); }
+    }
+
+    internal static async Task<(string Output, string Error)> RunCodexProcessAsync(Process process, string prompt, CancellationToken token, TimeSpan? responseLimit = null)
+    {
+        token.ThrowIfCancellationRequested(); process.Start();
+        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(responseLimit ?? CodexResponseLimit);
+        async Task Stop()
+        {
+            try { if (!process.HasExited) process.Kill(true); }
+            catch (Exception ex) when ((ex is InvalidOperationException or System.ComponentModel.Win32Exception) && process.HasExited) { }
+            await process.WaitForExitAsync();
+            try { await Task.WhenAll(output, error); } catch (IOException) { }
+        }
+        try
+        {
+            await process.StandardInput.WriteAsync(prompt.AsMemory(), timeout.Token); process.StandardInput.Close();
+            await process.WaitForExitAsync(timeout.Token);
+            return (await output, await error);
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            await Stop();
+            throw new TimeoutException("Codex 응답을 기다리는 시간이 초과됐어요. 다시 시도하거나 생각 깊이를 낮춰 주세요.");
+        }
+        catch { await Stop(); throw; }
     }
 
     internal static CommandPlan DecodeCodexEvents(string stream)

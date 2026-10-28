@@ -198,6 +198,11 @@
                                     <TextBlock x:Name="AsideFeedback" Text="연결 확인 시 Aside가 열릴 수 있어요. 새 대화나 웹 작업은 만들지 않습니다." Style="{StaticResource HelpText}" Margin="0,8,0,0" />
                                 </StackPanel>
                                 <TextBlock Text="모델 이름" Style="{StaticResource FieldLabel}" Margin="0,17,0,7" /><TextBox x:Name="ModelInput" Style="{StaticResource Field}" AutomationProperties.Name="AI 모델 이름" /><TextBlock x:Name="ModelHelp" Style="{StaticResource HelpText}" />
+                                <StackPanel x:Name="CodexEffortFields" Visibility="Collapsed" Margin="0,17,0,0">
+                                    <TextBlock Text="Codex 생각 깊이" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox x:Name="CodexEffortInput" SelectedIndex="0" AutomationProperties.Name="Codex 생각 깊이"><ComboBoxItem Content="낮음 · 빠른 응답 (기본)" Tag="low" /><ComboBoxItem Content="보통" Tag="medium" /><ComboBoxItem Content="높음 · 복잡한 질문" Tag="high" /></ComboBox>
+                                    <TextBlock Text="Codex로 답하는 요청에 적용합니다. 조합 모드에서도 Codex가 맡는 단계에 사용합니다. 높게 설정하면 응답 시간이 길어질 수 있습니다. 최대 3분 기다리며 중지 버튼으로 취소할 수 있어요. ‘설정 저장’을 눌러 적용하세요." Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,0" />
+                                </StackPanel>
                                 <StackPanel x:Name="OllamaFields" Visibility="Collapsed"><TextBlock Text="서버 기본 주소" Style="{StaticResource FieldLabel}" Margin="0,17,0,7" /><TextBox x:Name="BrainUrlInput" Text="http://127.0.0.1:11434" Style="{StaticResource Field}" TextChanged="BrainUrlInput_TextChanged" AutomationProperties.Name="AI 서버 주소" /></StackPanel>
                                 <StackPanel x:Name="ApiFields" Visibility="Collapsed" Margin="0,16,0,0">
                                     <TextBlock x:Name="ApiDestination" Style="{StaticResource HelpText}" />

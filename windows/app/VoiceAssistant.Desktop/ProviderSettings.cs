@@ -41,6 +41,7 @@ public partial class MainWindow
         ApiFields.Visibility = provider != null ? Visibility.Visible : Visibility.Collapsed;
         AsideFields.Visibility = id == "aside" ? Visibility.Visible : Visibility.Collapsed;
         ComboFields.Visibility = id == "combo" ? Visibility.Visible : Visibility.Collapsed;
+        CodexEffortFields.Visibility = id is "codex" or "combo" ? Visibility.Visible : Visibility.Collapsed;
         ModelInput.IsEnabled = id != "combo";
         if (id == "combo") ComboStatus.Text = ComboBrain.Status();
         ModelHelp.Text = id == "combo" ? "각 AI를 개별 선택해 지정한 모델을 사용합니다. 모델을 바꾸려면 해당 AI를 선택해 입력한 뒤 조합으로 돌아와 설정을 저장하세요. 지정하지 않으면 각 도구의 기본 모델을 사용합니다." : provider != null ? "함수 호출을 지원하는 모델을 선택하세요. 화면 이미지 작업에는 이미지 입력도 지원해야 합니다." :

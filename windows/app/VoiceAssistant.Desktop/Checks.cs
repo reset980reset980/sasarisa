@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--codex-effort-native"))
+        {
+            failed = await CodexEffortChecks.RunNativeAsync(rows, args.Contains("--medium-only"), CancellationToken.None);
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "codex-effort-native-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--mac-settings-only"))
         {
             failed = MacSettingsChecks.Run(rows);
@@ -341,6 +347,8 @@ public static class Checks
         failed += SettingsTransferChecks.Run(rows);
         failed += MacSettingsChecks.Run(rows);
         failed += WakePhraseChecks.Run(rows);
+        failed += CodexEffortChecks.Run(rows);
+        failed += await CodexEffortChecks.RunProcessAsync(rows);
         failed += await DistributionChecks.RunAsync(rows);
         failed += await WhisperChecks.RunAsync(rows);
         failed += WhisperWakeChecks.Run(rows);
