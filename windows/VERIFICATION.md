@@ -1,5 +1,13 @@
 # Windows 포트 검증 기록
 
+## 2026-10-29 · 개발 중 언어 전달 경로 (미설치)
+
+- 원본 `Config.languages`와 같은 12개 언어/지역을 정의했습니다. 기존 Windows 설정에 `Language`가 없으면 `ko`이며 잘못된 코드와 줄바꿈을 거절합니다. Windows 설정 내보내기·가져오기·변경 검토에서 언어를 유지하며 연결/장치 선택과 분리합니다. Mac 언어 가져오기는 다음 인식 구현과 함께 연결할 예정이며 기존 변환 동작을 바꾸지 않았습니다.
+- 공통 Brain과 Aside에 선택 언어의 답변 지시를 전달합니다. Aside는 언어가 바뀌면 기존 대화 세션을 재사용하지 않습니다. Whisper의 외부/관리 엔진에 요청별 `language`를 전달하고 사용자 음성 서버·ElevenLabs·Azure의 언어를 고정 한국어에서 선택값으로 바꿨습니다. Azure에서 비한국어 기본 목소리가 지정되지 않았으면 입력을 요구합니다. Windows 기본 목소리는 정확한 지역을 우선하고 같은 언어의 다른 지역을 다음으로 선택하며, 해당 언어가 없으면 설치 안내를 반환합니다. 명시적으로 선택한 목소리는 보존합니다.
+- 이 단계에는 실시간 다국어 recognizer, 언어 선택 화면, Mac 언어 변환, 전체 화면 문구 번역이 포함되지 않습니다. 비한국어 설정으로 한국어 worker를 시작하는 것은 거절합니다. **소스 작업 중이며 MSI 빌드·설치·정상 앱 재시작은 하지 않았습니다. 사용 중인 설치본은 0.2.44입니다.**
+- 새 6개 검사는 12개 언어 각각에 대해 설정 교환, 실제 루프백 Whisper multipart와 Brain/Ollama HTTP 요청, 외부 음성 JSON/SSML, SAPI 언어/지역 우선순위, 미지원 음성 입력의 실행 전 거절을 확인합니다. 기존 검사와 합쳐 449개를 실행했습니다. 언어 요청이 전달됨을 확인한 검사이며 실제 외국어 음성 인식 정확도나 유료 음성 생성 성공을 입증하지 않습니다. 보고서 `artifacts/conversation-language-0245/checks.json`.
+- 첫 테스트 실행에서 PowerShell 5의 `ProcessStartInfo.ArgumentList`를 사용한 인수 전달이 실패해 소스용 앱 창 한 개가 열렸습니다. 해당 소스 PID 10108을 종료했고 정상 설치본 PID 46128은 보존했습니다. 이후 `Arguments='--self-test'`를 사전 확인하고 `CreateNoWindow=true`로 다시 실행했습니다. 마이크 캡처·스피커 재생·브라우저 조작은 하지 않았습니다.
+
 ## 2026-10-29 · 0.2.44 입력 마이크 식별 및 선택 보존
 
 - 기존 구현은 PortAudio 숫자 순번만 저장했고 목록에서 선택을 못 찾으면 화면을 기본 마이크로 바꿨습니다. 이제 WASAPI는 [Windows 엔드포인트 ID](https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-immdevice-getid)를, 다른 방식은 오디오 방식/고유 이름을 해시한 식별자로 저장합니다. PortAudio의 빌린 IMMDevice는 해제하지 않고 GetId가 할당한 문자열만 반환합니다. WASAPI 입력은 공유 모드의 형식 변환 옵션을 전달합니다. 참고: [PortAudio 구현](https://github.com/PortAudio/portaudio/blob/master/src/hostapi/wasapi/pa_win_wasapi.c), [sounddevice 0.5.6 설정](https://python-sounddevice.readthedocs.io/en/0.5.6/api/platform-specific-settings.html).

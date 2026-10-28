@@ -90,8 +90,9 @@ public static class ExternalVoice
         var destination = options.Provider == "elevenlabs" ? "https://api.elevenlabs.io/v1/text-to-speech/" : Endpoint(options).AbsoluteUri;
         return "VoiceAssistantWindows:api:tts:" + options.Provider + ":" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(destination)));
     }
-    public static HttpRequestMessage Request(string text, VoicePreferences options, string? key)
+    public static HttpRequestMessage Request(string text, VoicePreferences options, string? key, string language = "ko")
     {
+        var selectedLanguage = ConversationLanguage.Get(language);
         options.Validate();
         if (text.Length is < 1 or > 1500) throw new ArgumentException("한 번의 음성 출력은 1~1,500자로 나눠 요청하세요.");
         if (key != null && (key.Length > 1280 || key.Any(char.IsControl))) throw new ArgumentException("음성 API 키는 한 줄로 입력하세요.");
@@ -107,30 +108,32 @@ public static class ExternalVoice
                 request.Headers.Add("xi-api-key", key);
                 var model = options.Model.Length == 0 ? "eleven_flash_v2_5" : options.Model;
                 var fields = new Dictionary<string, object> { ["text"] = text, ["model_id"] = model, ["voice_settings"] = new { stability = 0.45, similarity_boost = 0.8, style = 0.3, speed = options.Speed } };
-                if (model.Contains("v2_5", StringComparison.Ordinal)) fields["language_code"] = "ko";
+                if (model.Contains("v2_5", StringComparison.Ordinal)) fields["language_code"] = language;
                 body = fields; break;
             case "azure":
                 request.Headers.Add("Ocp-Apim-Subscription-Key", key);
                 request.Headers.Add("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm"); request.Headers.UserAgent.ParseAdd("SasarisaWindows/0.2");
                 XNamespace ns = "http://www.w3.org/2001/10/synthesis";
-                var xml = new XElement(ns + "speak", new XAttribute("version", "1.0"), new XAttribute(XNamespace.Xml + "lang", "ko-KR"),
+                if (language != "ko" && options.Voice.Length == 0) throw new ArgumentException(selectedLanguage.Label + " Azure 목소리 이름을 입력하세요.");
+                var xml = new XElement(ns + "speak", new XAttribute("version", "1.0"), new XAttribute(XNamespace.Xml + "lang", selectedLanguage.Locale),
                     new XElement(ns + "voice", new XAttribute("name", options.Voice.Length == 0 ? "ko-KR-SunHiNeural" : options.Voice),
                         new XElement(ns + "prosody", new XAttribute("rate", ((options.Speed - 1) * 100).ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture) + "%"), text)));
                 request.Content = new StringContent(xml.ToString(SaveOptions.DisableFormatting), Encoding.UTF8, "application/ssml+xml"); return request;
             default:
                 if (!string.IsNullOrWhiteSpace(key)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-                body = new { text, voice = options.Voice, language = "ko" }; break;
+                body = new { text, voice = options.Voice, language }; break;
         }
         request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"); return request;
     }
     public static HttpClient CreateClient() => new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
     public static async Task<VoiceAudio> FetchAsync(string text, VoicePreferences options, CancellationToken token,
-        HttpClient? client = null, Func<string, string?>? readKey = null, TimeSpan? timeout = null)
+        HttpClient? client = null, Func<string, string?>? readKey = null, TimeSpan? timeout = null, string language = "ko")
     {
         options.Validate(); token.ThrowIfCancellationRequested();
+        _ = ConversationLanguage.Get(language);
         if (options.Provider == "pro") return await ProAccountClient.Shared.FetchVoiceAsync(text, options, token);
         var key = (readKey ?? CredentialStore.Read)(CredentialTarget(options));
-        using var request = Request(text, options, key);
+        using var request = Request(text, options, key, language);
         using var ownClient = client == null ? CreateClient() : null; var http = client ?? ownClient!;
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token); limit.CancelAfter(timeout ?? TimeSpan.FromSeconds(20));
         try

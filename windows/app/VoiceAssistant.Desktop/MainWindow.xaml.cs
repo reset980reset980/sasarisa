@@ -20,6 +20,7 @@ public sealed record DeviceOption(string Id, string Label)
 
 public sealed record UiSettings
 {
+    public string Language { get; set; } = "ko";
     public string Name { get; set; } = "자비스";
     public Dictionary<string, string[]> LearnedWakes { get; set; } = new();
     public string[] WakeWords { get; set; } = Array.Empty<string>();

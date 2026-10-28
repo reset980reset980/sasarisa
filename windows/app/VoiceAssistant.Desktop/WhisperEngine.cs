@@ -66,7 +66,8 @@ internal sealed class WhisperEngine : IDisposable
     }
     async Task<WhisperTranscript> RefineCoreAsync(UiSettings settings, string wav, CancellationToken token)
     {
-        if (settings.WhisperMode == "external") return await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords);
+        _ = ConversationLanguage.Get(settings.Language);
+        if (settings.WhisperMode == "external") return await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords, settings.Language);
         if (!Enabled(settings)) return WhisperTranscript.Empty;
         try
         {
@@ -76,7 +77,7 @@ internal sealed class WhisperEngine : IDisposable
             // An unrelated loopback service must never receive captured speech.
             if (!WhisperProcessJob.OwnsListener(own.Id, route.Port)) throw new IOException("음성 보정 엔진의 연결을 확인하지 못했어요.");
             using var cancel = token.Register(() => StopOwned(own));
-            var answer = await SpeechInput.RefineEndpointAsync(route, wav, token, settings.Text.CustomWords).ConfigureAwait(false);
+            var answer = await SpeechInput.RefineEndpointAsync(route, wav, token, settings.Text.CustomWords, settings.Language).ConfigureAwait(false);
             token.ThrowIfCancellationRequested(); lock (sync) used = DateTime.UtcNow;
             return answer;
         }

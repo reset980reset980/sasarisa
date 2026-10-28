@@ -52,6 +52,7 @@ public static class SettingsStore
         s.LearnedWakes ??= new(); LearnedNames.Validate(s.LearnedWakes);
         WakePhrases.Validate(s.WakeWords);
         InputDeviceSelection.Validate(s.Device, s.DeviceLabel);
+        _ = ConversationLanguage.Get(s.Language);
         _ = CodexEffort.Label(s.BrainEffort);
         if (s.Activation is not ("voice" or "hotkey" or "hold")) throw new ArgumentException("호출 방식을 확인하세요.");
         if (s.BargeIn is not ("auto" or "any" or "wake" or "off")) throw new ArgumentException("답변 중 끼어들기 방식을 확인하세요.");

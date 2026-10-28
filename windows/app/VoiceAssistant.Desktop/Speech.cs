@@ -44,6 +44,8 @@ public sealed class SpeechInput : IDisposable
     }
     public void Start(UiSettings settings)
     {
+        if (ConversationLanguage.Get(settings.Language).Code != "ko")
+            throw new NotSupportedException("선택한 언어의 실시간 음성 입력은 아직 지원되지 않아요. 한국어를 선택하거나 텍스트로 명령하세요.");
         if (Running) return;
         var p = new Process { StartInfo = PythonInfo(), EnableRaisingEvents = true }; process = p; captureProcessId = 0; CaptureRequest = 0;
         var generation = ++Generation;
@@ -86,23 +88,24 @@ public sealed class SpeechInput : IDisposable
         foreach (var line in text.Split('\n').Where(x => x.StartsWith('{'))) { using var d = JsonDocument.Parse(line); if (d.RootElement.GetProperty("type").GetString() == "devices") return JsonSerializer.Deserialize<List<DeviceOption>>(d.RootElement.GetProperty("devices")) ?? new(); }
         return new[] { new DeviceOption("", "Windows 기본 마이크") };
     }
-    internal static async Task<WhisperTranscript> RefineAsync(string url, string wav, CancellationToken ct, string[]? words = null)
+    internal static async Task<WhisperTranscript> RefineAsync(string url, string wav, CancellationToken ct, string[]? words = null, string language = "ko")
     {
         var u = SettingsStore.ValidateLocalUrl(url);
         var endpoint = new Uri(u.GetLeftPart(UriPartial.Authority) + "/inference");
-        return await RefineEndpointAsync(endpoint, wav, ct, words);
+        return await RefineEndpointAsync(endpoint, wav, ct, words, language);
     }
-    internal static async Task<WhisperTranscript> RefineEndpointAsync(Uri endpoint, string wav, CancellationToken ct, string[]? words = null)
+    internal static async Task<WhisperTranscript> RefineEndpointAsync(Uri endpoint, string wav, CancellationToken ct, string[]? words = null, string language = "ko")
     {
         SettingsStore.ValidateLocalUrl(endpoint.AbsoluteUri);
+        _ = ConversationLanguage.Get(language);
         if (wav.Length > 3_000_000) throw new ArgumentException("보정할 음성이 너무 길어요.");
         using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(25), MaxResponseContentBufferSize = 1_048_576 };
         using var form = new MultipartFormDataContent();
         var content = new ByteArrayContent(Convert.FromBase64String(wav)); content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-        form.Add(content, "file", "speech.wav"); form.Add(new StringContent("ko"), "language"); form.Add(new StringContent("verbose_json"), "response_format");
+        form.Add(content, "file", "speech.wav"); form.Add(new StringContent(language), "language"); form.Add(new StringContent("verbose_json"), "response_format");
         // Confidence is available independently of token timing; timing is costly on CPU and unused here.
         form.Add(new StringContent("false"), "token_timestamps");
-        // verbose_json otherwise runs another encoder pass to detect every language, despite language=ko.
+        // The request supplies the language; an extra language-detection pass is unnecessary.
         form.Add(new StringContent("true"), "no_language_probabilities");
         form.Add(new StringContent("0"), "temperature"); form.Add(new StringContent("0"), "temperature_inc");
         if (words is { Length: > 0 })
@@ -149,7 +152,7 @@ public sealed class SpeechOutput : IDisposable
         CancellationTokenSource own;
         lock (gate) { cancel?.Cancel(); own = CancellationTokenSource.CreateLinkedTokenSource(token); cancel = own; }
         try { return await SpeechPipeline.RunAsync(text.Length > 1500 ? text[..1500] : text, options, own.Token,
-            (value, prefs, ct) => ExternalVoice.FetchAsync(value, prefs, ct),
+            (value, prefs, ct) => ExternalVoice.FetchAsync(value, prefs, ct, language: options.Language),
             (audio, prefs, ct) => VoicePlayback.PlayAsync(audio, prefs, ct, observer),
             async (value, prefs, ct) => await VoicePlayback.PlayAsync(await SapiSpeech.RenderAsync(value, prefs, ct), prefs, ct, observer)); }
         finally { lock (gate) { if (ReferenceEquals(cancel, own)) cancel = null; } own.Dispose(); }

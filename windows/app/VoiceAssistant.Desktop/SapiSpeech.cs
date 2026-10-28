@@ -13,6 +13,7 @@ internal static class SapiSpeech
 {
     public static Task<VoiceAudio> RenderAsync(string text, UiSettings options, CancellationToken token)
     {
+        var language = ConversationLanguage.Get(options.Language);
         var completion = new TaskCompletionSource<VoiceAudio>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
@@ -24,7 +25,7 @@ internal static class SapiSpeech
                 token.ThrowIfCancellationRequested(); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 instance = Activator.CreateInstance(Type.GetTypeFromProgID("SAPI.SpVoice") ?? throw new InvalidOperationException("Windows 음성 출력이 설치되어 있지 않아요."))!;
                 dynamic voice = instance;
-                object collection = voice.GetVoices(); dynamic voices = collection; var found = false;
+                object collection = voice.GetVoices(); dynamic voices = collection; var found = false; var bestPriority = 0;
                 try
                 {
                     for (var i = 0; i < voices.Count; i++)
@@ -32,14 +33,17 @@ internal static class SapiSpeech
                         object itemObject = voices.Item(i); dynamic item = itemObject;
                         try
                         {
-                            if (options.VoiceId.Length > 0 ? (string)item.Id != options.VoiceId : !((string)item.GetAttribute("Language")).Split(';').Contains("412")) continue;
-                            voice.Voice = item; found = true; break;
+                            var priority = options.VoiceId.Length > 0 ? (string)item.Id == options.VoiceId ? 3 : 0 : language.SapiPriority((string)item.GetAttribute("Language"));
+                            if (priority <= bestPriority) continue;
+                            voice.Voice = item; found = true; bestPriority = priority;
+                            if (priority >= 2) break;
                         }
                         finally { Marshal.FinalReleaseComObject(itemObject); }
                     }
                 }
                 finally { Marshal.FinalReleaseComObject(collection); }
                 if (options.VoiceId.Length > 0 && !found) throw new InvalidOperationException("선택한 목소리가 없어요. 설정에서 설치된 목소리를 선택하세요.");
+                if (!found) throw new InvalidOperationException(language.Label + " Windows 목소리가 설치되지 않았어요. Windows 언어 설정에서 음성 기능을 설치하거나 외부 목소리를 선택하세요.");
                 streamObject = Activator.CreateInstance(Type.GetTypeFromProgID("SAPI.SpFileStream") ?? throw new InvalidOperationException("Windows 음성 파일 출력을 사용할 수 없어요."))!;
                 dynamic stream = streamObject; stream.Open(path, 3, false);
                 voice.AudioOutputStream = stream; voice.Rate = options.SpeechRate; voice.Volume = 100;
