@@ -17,11 +17,16 @@ internal static class WhisperText
             text = text.Replace(latin, korean, StringComparison.OrdinalIgnoreCase);
         return new string(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
     }
+    internal static string Clean(string live, string refined)
+    {
+        if (string.IsNullOrWhiteSpace(refined) || refined.Length > 6000) return "";
+        var bad = new[] { "시청해 주셔서", "시청해주셔서", "구독과 좋아요", "구독 좋아요", "자막 제공", "MBC 뉴스", "Thanks for watching", "Thank you for watching", "Subtitles by" };
+        return string.Join(" ", refined.Split('\n', '\r').Select(x => x.Trim()).Where(x => x.Length > 0 && !bad.Any(b => x.Contains(b, StringComparison.OrdinalIgnoreCase) && !live.Contains(b, StringComparison.OrdinalIgnoreCase))));
+    }
     public static string Select(string live, string refined, IReadOnlyList<WhisperWord>? words = null)
     {
-        if (string.IsNullOrWhiteSpace(refined) || refined.Length > 6000) return live;
-        var bad = new[] { "시청해 주셔서", "시청해주셔서", "구독과 좋아요", "구독 좋아요", "자막 제공", "MBC 뉴스", "Thanks for watching", "Thank you for watching", "Subtitles by" };
-        var text = string.Join(" ", refined.Split('\n', '\r').Select(x => x.Trim()).Where(x => x.Length > 0 && !bad.Any(b => x.Contains(b, StringComparison.OrdinalIgnoreCase) && !live.Contains(b, StringComparison.OrdinalIgnoreCase))));
+        var text = Clean(live, refined);
+        if (text.Length == 0) return live;
         var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
         var dropped = "";
         if (parts.Count >= 3)

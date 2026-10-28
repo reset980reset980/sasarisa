@@ -187,9 +187,11 @@ internal static class WhisperChecks
                     var status = await engine.CheckAsync(selected, limit.Token); int pid = engine.ProcessId;
                     Require(pid > 0 && status.Contains(selected == "cuda" ? "NVIDIA" : "CPU"), "Actual backend not ready: " + status);
                     var wav = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(AppPaths.WindowsRoot, "artifacts", "whisper-native", "clock.wav")));
-                    var watch = Stopwatch.StartNew(); var transcript = await engine.RefineAsync(new UiSettings { WhisperMode = selected }, wav, limit.Token);
+                    var options = new UiSettings { WhisperMode = selected, Name = "자비스" };
+                    var watch = Stopwatch.StartNew(); var transcript = await engine.TryRefineAsync(WhisperWake.WithPrompt(options), wav, limit.Token) ?? throw new Exception("Idle engine skipped name check");
                     Require(transcript.Text.Contains("몇") && transcript.Text.Contains("시"), "Synthetic clock sample not recognized: " + transcript.Text);
                     Require(transcript.Words.Count > 0 && transcript.Words.All(w => double.IsFinite(w.Probability) && w.Probability is >= 0 and <= 1), "Native token confidence missing");
+                    Require(WhisperWake.Decide(options, "자비서 지금 몇 시야", transcript).Wake, "Actual second recognition failed to recover name");
                     rows.Add(new { name = "Whisper native " + selected + " sample measurement", pass = true, seconds = watch.Elapsed.TotalSeconds, text = transcript.Text, words = transcript.Words });
                     Require(engine.ProcessId == pid, "Model unnecessarily restarted");
                     engine.Stop(); Require(engine.ProcessId == 0, "Server retained");

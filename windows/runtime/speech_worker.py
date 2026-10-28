@@ -120,6 +120,27 @@ def wake_pattern(cfg):
     return re.compile(r"(?:헤이\s*|하이\s*|hey\s*)?(?:" + "|".join(variants) + ")", re.I)
 
 
+def whisper_enabled(cfg):
+    return cfg.get("WhisperMode", "external") in ("cpu", "cuda") or (cfg.get("WhisperMode", "external") == "external" and bool(cfg.get("WhisperUrl")))
+
+
+def missed_name_audio(cfg, audio):
+    """Keep a short voiced candidate when ASR produced no text for a Latin name.
+
+    Silence, a single click and non-periodic noise must not start repeated model work.
+    The app still owns the name/command decision and cancellation.
+    """
+    if not whisper_enabled(cfg) or cfg.get("Activation", "voice") != "voice" or not re.search(r"[a-z]", cfg.get("Name", "자비스"), re.I):
+        return []
+    voiced = [i for i, x in enumerate(audio) if len(x) >= 640 and np.isfinite(x).all()
+              and float(np.sqrt(np.mean(x * x))) >= .003 and periodicity(x) >= .3]
+    if len(voiced) < 2:
+        return []
+    candidate = audio[max(0, voiced[0] - 1):min(len(audio), voiced[-1] + 3)]
+    count = sum(len(x) for x in candidate)
+    return candidate if SR * .5 < count < SR * 4.5 else []
+
+
 class Recognizer:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -184,13 +205,14 @@ class Recognizer:
         return time.perf_counter() - started
 
     def finish(self):
-        if self.text:
+        audio = self.audio if self.text else missed_name_audio(self.cfg, self.audio)
+        if self.text or audio:
             match = self.wake.search(self.text)
             command = re.sub(r"^[야아](?=\s|[,.!?~]|$)", "", self.text[match.end():]).strip(" ,.!?~") if match else self.text
             data = dict(text=self.text, command=command, has_wake=self.woken,
-                        utterance=self.sequence, duration=round(len(self.audio) * CHUNK / SR, 2))
-            if self.cfg.get("WhisperMode", "external") in ("cpu", "cuda") or (self.cfg.get("WhisperMode", "external") == "external" and self.cfg.get("WhisperUrl")):
-                pcm = np.clip(np.concatenate(self.audio) * 32767, -32768, 32767).astype("<i2")
+                        utterance=self.sequence, duration=round(sum(len(x) for x in audio) / SR, 2))
+            if whisper_enabled(self.cfg) and audio:
+                pcm = np.clip(np.concatenate(audio) * 32767, -32768, 32767).astype("<i2")
                 buf = io.BytesIO()
                 with wave.open(buf, "wb") as wav:
                     wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(SR)

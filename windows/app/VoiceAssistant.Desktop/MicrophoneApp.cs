@@ -27,6 +27,7 @@ public partial class App
     }
     void CaptureInput(bool enabled)
     {
+        CancelWakeCheck();
         speechCapturePending = true;
         input.Capture(microphonePause.Permit(enabled) && DateTimeOffset.UtcNow >= speechTailUntil);
     }

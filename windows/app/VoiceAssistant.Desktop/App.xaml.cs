@@ -49,6 +49,7 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--internet-phone-ui-preview")) { await ShowInternetPhonePreviewAsync(); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--listening-app-only")) { Shutdown(RunListeningAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--whisper-app-only")) { Shutdown(await RunWhisperAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--whisper-wake-app-only")) { Shutdown(await RunWhisperWakeAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--whisper-job-host")) { Shutdown(await WhisperChecks.RunJobHostAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--vocabulary-app-only")) { Shutdown(await RunVocabularyAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--internet-phone-app-only")) { Shutdown(await RunInternetPhoneAppChecksAsync(e.Args.Contains("--phone-ai"))); return; }
@@ -199,6 +200,7 @@ public partial class App : System.Windows.Application
     }
     void Wake()
     {
+        CancelWakeCheck();
         if (personalEditorOpen) return;
         if (!listening && !starting) RememberListening(true);
         if(settings.Activation=="hold")
@@ -228,6 +230,7 @@ public partial class App : System.Windows.Application
     }
     void StopTurn()
     {
+        CancelWakeCheck();
         EndSpeechBarge(true, false); waitingBarge = false; bargeInputUntil = DateTimeOffset.MinValue;
         microphonePause.EndManual();
         window.CancelTextPreview();
@@ -259,6 +262,7 @@ public partial class App : System.Windows.Application
             case "level": if (listening) { ObserveMicrophoneSignal(message); ObserveBargeLevel(message); window.SetLevel(message.GetProperty("value").GetDouble()); } break;
             case "partial":
                 signalPartials++;
+                if (wakeCheck != null && message.TryGetProperty("utterance", out var nextUtterance) && nextUtterance.GetInt32() > wakeCheckUtterance) CancelWakeCheck();
                 if (speaking) TryBargeText(message);
                 if (!speaking && !busy && listening)
                 {
@@ -267,14 +271,15 @@ public partial class App : System.Windows.Application
                     if (awakeUntil > DateTimeOffset.Now) overlay.SetContent("듣고 있어요", text, false);
                 }
                 break;
-            case "wake": if (listening && !speaking && !busy && settings.Activation == "voice") { awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds); overlay.SetContent("말씀하세요", "이름을 들었어요. 이어서 말씀하세요.", false); overlay.ShowOverlay(); RefreshStatus(); } break;
+            case "wake": if (listening && !speaking && !busy && settings.Activation == "voice") { CancelWakeCheck(); awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds); overlay.SetContent("말씀하세요", "이름을 들었어요. 이어서 말씀하세요.", false); overlay.ShowOverlay(); RefreshStatus(); } break;
             case "final":
                 signalFinals++;
                 if (speaking) TryBargeText(message);
                 if (!listening || speaking || busy) break;
                 var id = message.GetProperty("utterance").GetInt32(); if (id <= lastUtterance) break; lastUtterance = id;
+                CancelWakeCheck();
                 if (message.GetProperty("has_wake").GetBoolean() && settings.Activation == "voice") awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds);
-                if (awakeUntil <= DateTimeOffset.Now && !dictating) break;
+                if (awakeUntil <= DateTimeOffset.Now && !dictating) { CheckMissedWake(message); break; }
                 var command = message.GetProperty(dictating ? "text" : "command").GetString() ?? ""; if (string.IsNullOrWhiteSpace(command)) break;
                 var wav = message.TryGetProperty("wav", out var w) ? w.GetString() : null;
                 if(settings.Activation=="hold")holding=false;
@@ -287,6 +292,7 @@ public partial class App : System.Windows.Application
     }
     async Task SubmitAsync(string text, bool voice, string? wav = null, bool interruptedSpeech = false)
     {
+        CancelWakeCheck();
         var isDictation = dictating && voice;
         if (interruptedSpeech) text = BargeInSession.DropGreeting(text, settings.Desktop.UserName);
         text = isDictation ? text.Trim() : LearnedNames.Strip(text, settings); if (string.IsNullOrWhiteSpace(text)) { Wake(); return; }

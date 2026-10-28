@@ -13,6 +13,7 @@ public partial class App
 
     void StopInput()
     {
+        CancelWakeCheck();
         microphoneRecoveryPending = automaticSpeechStart = waitingBarge = false; speechCapturePending = true;
         microphoneHealth.Stop(); input.Stop(); listening = starting = false;
     }

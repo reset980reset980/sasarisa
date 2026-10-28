@@ -110,7 +110,7 @@ public sealed class NameLearning
         }
         return row[y.Length] <= Math.Max(2, (int)(Math.Max(x.Length, y.Length) * .4));
     }
-    static string? HangulReading(string name)
+    internal static string? HangulReading(string name)
     {
         var value = name.ToLowerInvariant(); if (!Regex.IsMatch(value, @"^([bcdfghjklmnprstvz]?[aeiouy])+$")) return null;
         var leads = new Dictionary<char, int> { ['g']=0,['n']=2,['d']=3,['r']=5,['l']=5,['m']=6,['b']=7,['v']=7,['s']=9,['j']=12,['z']=12,['c']=15,['k']=15,['t']=16,['p']=17,['f']=17,['h']=18 };

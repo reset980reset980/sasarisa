@@ -321,6 +321,7 @@ public static class Checks
         failed += SettingsTransferChecks.Run(rows);
         failed += await DistributionChecks.RunAsync(rows);
         failed += await WhisperChecks.RunAsync(rows);
+        failed += WhisperWakeChecks.Run(rows);
         failed += await WhisperPrerequisiteChecks.RunAsync(rows);
         failed += await AgentChecks.RunAsync(rows, args.Contains("--ai"));
         failed += await BrowserChecks.RunAsync(rows, args.Contains("--ai"));

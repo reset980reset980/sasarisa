@@ -51,24 +51,36 @@ internal sealed class WhisperEngine : IDisposable
     }
     public async Task<WhisperTranscript> RefineAsync(UiSettings settings, string wav, CancellationToken token)
     {
-        if (settings.WhisperMode == "external") return await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords);
-        if (!Enabled(settings)) return WhisperTranscript.Empty;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.Token);
         await serial.WaitAsync(linked.Token);
+        try { return await RefineCoreAsync(settings, wav, linked.Token).ConfigureAwait(false); }
+        finally { serial.Release(); }
+    }
+    public async Task<WhisperTranscript?> TryRefineAsync(UiSettings settings, string wav, CancellationToken token)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.Token);
+        // Idle name checks never queue behind a command, installation or another check.
+        if (!await serial.WaitAsync(0, linked.Token)) return null;
+        try { return await RefineCoreAsync(settings, wav, linked.Token).ConfigureAwait(false); }
+        finally { serial.Release(); }
+    }
+    async Task<WhisperTranscript> RefineCoreAsync(UiSettings settings, string wav, CancellationToken token)
+    {
+        if (settings.WhisperMode == "external") return await SpeechInput.RefineAsync(settings.WhisperUrl, wav, token, settings.Text.CustomWords);
+        if (!Enabled(settings)) return WhisperTranscript.Empty;
         try
         {
-            await StartAsync(settings.WhisperMode, linked.Token).ConfigureAwait(false);
+            await StartAsync(settings.WhisperMode, token).ConfigureAwait(false);
             Process own; Uri route;
             lock (sync) { own = process ?? throw new IOException("음성 보정 엔진이 종료됐어요."); route = endpoint!; }
             // An unrelated loopback service must never receive captured speech.
             if (!WhisperProcessJob.OwnsListener(own.Id, route.Port)) throw new IOException("음성 보정 엔진의 연결을 확인하지 못했어요.");
-            using var cancel = linked.Token.Register(() => StopOwned(own));
-            var answer = await SpeechInput.RefineEndpointAsync(route, wav, linked.Token, settings.Text.CustomWords).ConfigureAwait(false);
-            linked.Token.ThrowIfCancellationRequested(); lock (sync) used = DateTime.UtcNow;
+            using var cancel = token.Register(() => StopOwned(own));
+            var answer = await SpeechInput.RefineEndpointAsync(route, wav, token, settings.Text.CustomWords).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested(); lock (sync) used = DateTime.UtcNow;
             return answer;
         }
         catch { Stop(); throw; }
-        finally { serial.Release(); }
     }
     async Task StartAsync(string selectedMode, CancellationToken token)
     {
