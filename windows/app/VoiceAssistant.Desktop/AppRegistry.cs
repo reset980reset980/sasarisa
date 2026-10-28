@@ -14,7 +14,18 @@ public sealed class AppRegistry
     readonly string file;
     List<RegisteredApp> apps = new();
     bool corrupt;
+    string knownStamp = "missing";
     public IReadOnlyList<RegisteredApp> Items => apps.AsReadOnly();
+    public int Version { get; private set; }
+    internal string StorageStamp { get { DataFileStamp.Require(file, knownStamp); return knownStamp; } }
+    internal string StoragePath => file;
+    internal string BackupPath => file + ".backup";
+    internal void ApplySnapshot(IReadOnlyList<RegisteredApp> next, int expectedVersion, string expectedStamp)
+    {
+        if (corrupt) throw new InvalidOperationException(Error);
+        if (expectedVersion != Version) throw new InvalidOperationException("등록 앱 목록이 바뀌었어요. 새로 가져와 확인하세요.");
+        DataFileStamp.Require(file, expectedStamp); AppDataTransfer.ValidateSnapshot(next); Write(next.ToList());
+    }
     public string? Error => corrupt ? "등록 앱 파일을 읽지 못했어요. apps.json과 백업 파일을 확인하세요." : null;
     public AppRegistry(string? path = null)
     {
@@ -22,13 +33,19 @@ public sealed class AppRegistry
         if (!File.Exists(file)) return;
         try
         {
-            var loaded = JsonSerializer.Deserialize<List<RegisteredApp>>(File.ReadAllText(file), SettingsStore.Json) ?? throw new JsonException();
+            var text = DataFileStamp.ReadText(file, out var loadedStamp); var loaded = JsonSerializer.Deserialize<List<RegisteredApp>>(text, SettingsStore.Json) ?? throw new JsonException();
             if (loaded.Count > 100 || loaded.Any(x => x == null || string.IsNullOrEmpty(x.Id) || !x.Id.StartsWith("custom:", StringComparison.Ordinal) || !Guid.TryParse(x.Id[7..], out _) || string.IsNullOrWhiteSpace(x.Name) || string.IsNullOrEmpty(x.Path) || !System.IO.Path.IsPathFullyQualified(x.Path)) || loaded.Select(x => x.Id).Distinct().Count() != loaded.Count || loaded.Select(x => Key(x.Name)).Distinct().Count() != loaded.Count) throw new JsonException();
-            apps = loaded;
+            knownStamp = loadedStamp; apps = loaded;
         }
         catch (Exception ex) when (ex is JsonException or IOException or ArgumentException) { corrupt = true; AppPaths.Log("apps", "등록 앱 파일 읽기 실패"); }
     }
     static string Key(string name) => CommandParser.Normalize(name).Replace(" ", "").ToUpperInvariant();
+    internal void Reload()
+    {
+        if (!corrupt && DataFileStamp.Read(file) == knownStamp) return;
+        var loaded = new AppRegistry(file); if (loaded.Error != null) throw new InvalidOperationException(loaded.Error);
+        apps = loaded.apps; knownStamp = loaded.knownStamp; corrupt = false; Version++;
+    }
     public RegisteredApp? Resolve(string name) => apps.FirstOrDefault(x => Key(x.Name) == Key(name));
     public RegisteredApp? Find(string id) => apps.FirstOrDefault(x => x.Id == id);
     public static void ValidatePath(string path)
@@ -58,9 +75,15 @@ public sealed class AppRegistry
     }
     void Write(List<RegisteredApp> next)
     {
+        DataFileStamp.Require(file, knownStamp);
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
-        File.WriteAllText(file + ".new", JsonSerializer.Serialize(next, SettingsStore.Json));
-        if (File.Exists(file)) File.Replace(file + ".new", file, file + ".backup"); else File.Move(file + ".new", file);
-        apps = next;
+        var temp = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            var text = JsonSerializer.Serialize(next, SettingsStore.Json); File.WriteAllText(temp, text);
+            if (File.Exists(file)) File.Replace(temp, file, file + ".backup"); else File.Move(temp, file);
+            apps = next; knownStamp = DataFileStamp.Text(text); Version++;
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 }

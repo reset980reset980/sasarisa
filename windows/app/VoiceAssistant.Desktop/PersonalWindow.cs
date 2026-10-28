@@ -8,7 +8,7 @@ using System.Windows.Media;
 
 namespace VoiceAssistant.Desktop;
 
-public sealed class PersonalWindow : Window
+public sealed partial class PersonalWindow : Window
 {
     sealed record Entry(string Key, string Label);
     sealed record Step(AssistantAction Action) { public string Label => Personalization.DescribeAction(Action); }
@@ -23,6 +23,7 @@ public sealed class PersonalWindow : Window
     PersonalState view = new();
     PersonalState? previous;
     int revision, undoVersion;
+    string undoStamp = "";
     string Kind => (category.SelectedItem as DeviceOption)?.Id ?? "notes";
     public PersonalWindow(Personalization store)
     {
@@ -31,7 +32,8 @@ public sealed class PersonalWindow : Window
         var root = new DockPanel { Margin = new Thickness(24) }; Content = root;
         var header = new StackPanel { Margin = new Thickness(0,0,0,18) };
         header.Children.Add(new TextBlock { Text = "기억과 실행 방법을 관리하세요", FontSize = 23, FontWeight = FontWeights.SemiBold });
-        header.Children.Add(new TextBlock { Text = "수정한 내용은 바로 저장됩니다. 이 창에서 마지막 변경을 되돌릴 수 있어요.", Foreground = Brushes.SlateGray, Margin = new Thickness(0,8,0,15), TextWrapping = TextWrapping.Wrap });
+        header.Children.Add(new TextBlock { Text = "저장을 누르면 수정한 내용을 반영합니다. 마지막 변경을 되돌리거나 이전 저장을 복원할 수 있어요.", Foreground = Brushes.SlateGray, Margin = new Thickness(0,8,0,15), TextWrapping = TextWrapping.Wrap });
+        AddTransferButtons(header);
         category.ItemsSource = new[] { new DeviceOption("notes", "기억"), new DeviceOption("routines", "루틴"), new DeviceOption("learned", "배운 실행 방법") }; AutomationProperties.SetName(category, "관리할 종류"); header.Children.Add(category);
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
         var footer = new StackPanel { Margin = new Thickness(0,15,0,0) }; footer.Children.Add(status);
@@ -61,6 +63,8 @@ public sealed class PersonalWindow : Window
     { var button = new Button { Content = text, Style = (Style)Application.Current.FindResource(primary ? "ActionButton" : "SecondaryButton"), Padding = new Thickness(12,8,12,8), Margin = new Thickness(0,0,8,8), HorizontalAlignment = HorizontalAlignment.Left }; button.Click += handler; return button; }
     void Refresh(string? selected = null)
     {
+        try { store.Reload(); }
+        catch (Exception ex) { Error(ex); save.IsEnabled = remove.IsEnabled = undo.IsEnabled = false; return; }
         view = store.Snapshot(); revision = store.Version;
         entries.ItemsSource = Kind switch { "routines" => view.Routines.Keys.Select(x => new Entry(x, x)).ToArray(), "learned" => view.Learned.Keys.Select(x => new Entry(x, x)).ToArray(), _ => view.Notes.Select((x,i) => new Entry(i.ToString(), x.Length > 70 ? x[..70] + "…" : x)).ToArray() };
         entries.SelectedItem = entries.Items.OfType<Entry>().FirstOrDefault(x => x.Key == selected); Fill();
@@ -91,7 +95,7 @@ public sealed class PersonalWindow : Window
     void Move(int delta) { var index = steps.SelectedIndex; if (index < 0 || index + delta < 0 || index + delta >= draft.Count) return; draft.Move(index, index + delta); steps.SelectedIndex = index + delta; }
     void Change(Action action, string? selected, string message)
     {
-        try { var before = store.Snapshot(); action(); previous = before; undoVersion = store.Version; Refresh(selected); status.Text = message; status.Foreground = Brushes.DarkGreen; }
+        try { var before = store.Snapshot(); action(); previous = before; undoVersion = store.Version; undoStamp = store.StorageStamp; Refresh(selected); status.Text = message; status.Foreground = Brushes.DarkGreen; }
         catch (Exception ex) { Error(ex); }
     }
     void Save()
@@ -108,7 +112,7 @@ public sealed class PersonalWindow : Window
     void Undo()
     {
         if (previous == null) return;
-        try { store.Restore(previous, undoVersion); previous = null; Refresh(); status.Text = "마지막 변경 전으로 복원했어요."; status.Foreground = Brushes.DarkGreen; }
+        try { store.ApplySnapshot(previous, undoVersion, undoStamp); previous = null; Refresh(); status.Text = "마지막 변경 전으로 복원했어요."; status.Foreground = Brushes.DarkGreen; }
         catch (Exception ex) { Error(ex); }
     }
     void Error(Exception error) { status.Text = error.Message; status.Foreground = Brushes.Firebrick; }

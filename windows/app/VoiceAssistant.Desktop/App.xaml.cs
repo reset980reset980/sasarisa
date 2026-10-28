@@ -43,6 +43,7 @@ public partial class App : System.Windows.Application
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--personal-data-app-only")) { Shutdown(PersonalDataAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--execution-consent-app-only")) { Shutdown(await RunExecutionConsentAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--speech-capture-app-only")) { Shutdown(RunSpeechCaptureAppChecks()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-device-app-only")) { Shutdown(InputDeviceAppChecks.Run()); return; }

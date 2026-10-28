@@ -12,27 +12,44 @@ public sealed record PersonalState
     public Dictionary<string, List<AssistantAction>> Routines { get; set; } = new();
     public Dictionary<string, CommandPlan> Learned { get; set; } = new();
     public List<string> Notes { get; set; } = new();
+    public Dictionary<string, MacLearningInfo> MacLearning { get; set; } = new();
 }
+public sealed record MacLearningInfo(long Uses, double Learned);
 
 public sealed class Personalization
 {
-    PersonalState state = new(); string lastLearned = ""; readonly string FilePath;
+    PersonalState state = new(); string lastLearned = ""; readonly string FilePath; string knownStamp = "missing";
     public string? Error { get; private set; }
     public int Version { get; private set; }
+    internal string StorageStamp { get { DataFileStamp.Require(FilePath, knownStamp); return knownStamp; } }
+    internal string StoragePath => FilePath;
+    internal string BackupPath => FilePath + ".backup";
     static readonly HashSet<string> Reusable = new() { "display_off", "open_app", "open_url", "volume", "volume_delta", "media", "browser", "timer", "cancel_timers", "youtube_play", "youtube_search" };
     public Personalization(string? file = null)
     {
         FilePath = file ?? Path.Combine(AppPaths.Home, "personal.json");
         if (!File.Exists(FilePath)) return;
-        try { var loaded = JsonSerializer.Deserialize<PersonalState>(File.ReadAllText(FilePath), SettingsStore.Json) ?? throw new JsonException(); ValidateState(loaded); state = loaded; }
+        try { var text = DataFileStamp.ReadText(FilePath, out var loadedStamp); var loaded = JsonSerializer.Deserialize<PersonalState>(text, SettingsStore.Json) ?? throw new JsonException(); ValidateState(loaded); knownStamp = loadedStamp; state = loaded; }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         { Error = "저장된 기억·루틴 파일을 읽지 못했어요. personal.json과 .backup 파일을 확인하세요. 기존 파일은 덮어쓰지 않습니다."; }
     }
     static PersonalState Copy(PersonalState value) => JsonSerializer.Deserialize<PersonalState>(JsonSerializer.Serialize(value))!;
     public PersonalState Snapshot() => Copy(state);
+    internal void Reload()
+    {
+        if (Error == null && DataFileStamp.Read(FilePath) == knownStamp) return;
+        var loaded = new Personalization(FilePath);
+        if (loaded.Error != null) throw new InvalidOperationException(loaded.Error);
+        state = loaded.state; knownStamp = loaded.knownStamp; Error = null; lastLearned = ""; Version++;
+    }
+    internal void ApplySnapshot(PersonalState next, int expectedVersion, string expectedStamp)
+    {
+        RequireVersion(expectedVersion); DataFileStamp.Require(FilePath, expectedStamp); ValidateState(next);
+        Update(s => { var copy = Copy(next); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; s.MacLearning = copy.MacLearning; }); lastLearned = "";
+    }
     static void ValidateState(PersonalState value)
     {
-        if (value.Routines == null || value.Learned == null || value.Notes == null || value.Routines.Count > 1000 || value.Learned.Count > 1000 || value.Notes.Count > 1000 || value.Notes.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 4000)) throw new JsonException("Invalid personal data");
+        if (value.Routines == null || value.Learned == null || value.Notes == null || value.MacLearning == null || value.MacLearning.Count > 1000 || value.MacLearning.Any(x => !value.Learned.ContainsKey(x.Key) || x.Value == null || x.Value.Uses < 0 || !double.IsFinite(x.Value.Learned)) || value.Routines.Count > 1000 || value.Learned.Count > 1000 || value.Notes.Count > 1000 || value.Notes.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 4000)) throw new JsonException("Invalid personal data");
         void Actions(IReadOnlyCollection<AssistantAction>? actions) { if (actions == null || actions.Count is < 1 or > 8 || actions.Any(a => a == null || !Reusable.Contains(a.Kind) || a.Value == null || a.Value.Length > 4000)) throw new JsonException("Invalid stored actions"); }
         foreach (var row in value.Routines) { if (string.IsNullOrWhiteSpace(row.Key) || row.Key.Length > 30) throw new JsonException(); Actions(row.Value); }
         foreach (var row in value.Learned) { if (string.IsNullOrWhiteSpace(row.Key) || row.Key.Length > 6000 || row.Value == null || row.Value.Reply == null || row.Value.Reply.Length > 12000) throw new JsonException(); Actions(row.Value.Actions?.ToArray()); }
@@ -41,15 +58,21 @@ public sealed class Personalization
     void Update(Action<PersonalState> update)
     {
         if (Error != null) throw new InvalidOperationException(Error);
+        DataFileStamp.Require(FilePath, knownStamp);
         var next = Copy(state); update(next); ValidateState(next);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(FilePath))!);
-        var temp = FilePath + ".new"; File.WriteAllText(temp, JsonSerializer.Serialize(next, SettingsStore.Json));
-        if (File.Exists(FilePath)) File.Replace(temp, FilePath, FilePath + ".backup"); else File.Move(temp, FilePath);
-        state = next; Version++;
+        var text = JsonSerializer.Serialize(next, SettingsStore.Json); var temp = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, text);
+            if (File.Exists(FilePath)) File.Replace(temp, FilePath, FilePath + ".backup"); else File.Move(temp, FilePath);
+            state = next; knownStamp = DataFileStamp.Text(text); Version++;
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
     void RequireVersion(int expected) { if (expected != Version) throw new InvalidOperationException("다른 명령으로 저장 내용이 바뀌었어요. 새로고침 후 다시 선택하세요."); }
     public void Restore(PersonalState previous, int expectedVersion)
-    { RequireVersion(expectedVersion); Update(s => { var copy = Copy(previous); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; }); lastLearned = ""; }
+    { RequireVersion(expectedVersion); Update(s => { var copy = Copy(previous); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; s.MacLearning = copy.MacLearning; }); lastLearned = ""; }
     static string Key(string text) => CommandParser.Normalize(text).Replace(" ", "").ToUpperInvariant();
     public void SaveNote(int? index, string text, int expectedVersion)
     {
@@ -79,7 +102,7 @@ public sealed class Personalization
         if (original != null && !state.Learned.ContainsKey(original)) throw new InvalidOperationException("수정할 학습 내용을 다시 선택하세요.");
         if (state.Learned.Keys.Any(x => x != original && Key(x) == Key(phrase))) throw new ArgumentException("같은 호출 문장이 있어요.");
         var list = ValidActions(actions);
-        Update(s => { if (original != null) s.Learned.Remove(original); if (s.Learned.Count >= 100) throw new ArgumentException("배운 실행 방법은 최대 100개입니다."); s.Learned[phrase] = new(reply, list); });
+        Update(s => { MacLearningInfo? info = null; if (original != null) { s.Learned.Remove(original); if (s.MacLearning.Remove(original, out var saved)) info = saved; } if (s.Learned.Count >= 100) throw new ArgumentException("배운 실행 방법은 최대 100개입니다."); s.Learned[phrase] = new(reply, list); if (info != null) s.MacLearning[phrase] = info; });
     }
     public void Remove(string category, string key, int expectedVersion)
     {
@@ -88,7 +111,7 @@ public sealed class Personalization
         {
             if (category == "notes" && int.TryParse(key, out var index) && index >= 0 && index < s.Notes.Count) s.Notes.RemoveAt(index);
             else if (category == "routines" && s.Routines.Remove(key)) { }
-            else if (category == "learned" && s.Learned.Remove(key)) { }
+            else if (category == "learned" && s.Learned.Remove(key)) { s.MacLearning.Remove(key); }
             else throw new ArgumentException("삭제할 항목을 다시 선택하세요.");
         });
         if (category == "learned" && lastLearned == key) lastLearned = "";
@@ -118,7 +141,7 @@ public sealed class Personalization
         if (compact is "아니" or "그게아니야")
         {
             if (lastLearned.Length == 0) return Answer("어떻게 바꿀지 말씀해 주세요.");
-            var key = lastLearned; Update(s => s.Learned.Remove(key)); lastLearned = ""; return Answer("방금 배운 실행 방법을 지웠어요. 어떻게 바꿀지 말씀해 주세요.");
+            var key = lastLearned; Update(s => { s.Learned.Remove(key); s.MacLearning.Remove(key); }); lastLearned = ""; return Answer("방금 배운 실행 방법을 지웠어요. 어떻게 바꿀지 말씀해 주세요.");
         }
         Match m;
         if ((m = Regex.Match(text, @"^기억해(?:줘)?\s*[:：,]?\s*(.+)$")).Success) return new("기억했어요.", new[] { new AssistantAction("remember", m.Groups[1].Value) });
@@ -131,10 +154,15 @@ public sealed class Personalization
             if (name.Length < 1 || name.Length > 30 || actions.Count > 8) throw new InvalidOperationException("루틴 이름은 1~30자, 동작은 최대 8개입니다.");
             return new($"‘{name}’ 루틴을 저장했어요.", new[] { new AssistantAction("save_routine", JsonSerializer.Serialize(new RoutineDefinition(name, actions))) });
         }
-        var match = state.Routines.Keys.FirstOrDefault(k => compact == k.Replace(" ", "") || compact == k.Replace(" ", "") + "해줘" || compact == k.Replace(" ", "") + "시작");
+        var match = state.Routines.ContainsKey(text) ? text : RoutineMatch(text);
         if (match != null) return new($"‘{match}’ 루틴을 실행했어요.", state.Routines[match]);
         var conditional = CommandParser.RequiresObservations(text);
         if (!conditional && state.Learned.TryGetValue(text, out var learned) && CanReuse(learned.Actions)) return learned;
+        if (!conditional)
+        {
+            var matches = state.Learned.Where(x => Key(x.Key) == Key(text)).Take(2).ToArray();
+            if (matches.Length == 1 && CanReuse(matches[0].Value.Actions)) return matches[0].Value;
+        }
         if (!conditional && Regex.IsMatch(text, @"(?:열고|켜고|틀고|줄이고|그리고|한\s*다음)"))
         {
             var parts = SplitCommands(text); if (parts.Length > 1) { var plans = parts.Select(CommandParser.Parse).ToArray(); if (plans.All(p => p != null) && plans.SelectMany(p => p!.Actions).All(a => Reusable.Contains(a.Kind))) return new(string.Join(" ", plans.Select(p => p!.Reply)), plans.SelectMany(p => p!.Actions).ToList()); }
@@ -163,7 +191,21 @@ public sealed class Personalization
     public void Learn(string text, CommandPlan plan)
     {
         if (Error != null || CommandParser.RequiresObservations(text) || !CanReuse(plan.Actions)) return;
-        Update(s => { s.Learned[CommandParser.Normalize(text)] = plan; while (s.Learned.Count > 100) s.Learned.Remove(s.Learned.Keys.First()); }); lastLearned = CommandParser.Normalize(text);
+        var normalized = CommandParser.Normalize(text); var matches = state.Learned.Keys.Where(x => Key(x) == Key(normalized)).Take(2).ToArray();
+        var key = state.Learned.ContainsKey(normalized) ? normalized : matches.Length == 1 ? matches[0] : normalized;
+        Update(s => { s.Learned[key] = plan; while (s.Learned.Count > 100) { var oldest = s.Learned.Keys.First(); s.Learned.Remove(oldest); s.MacLearning.Remove(oldest); } }); lastLearned = key;
+    }
+    string? RoutineMatch(string text)
+    {
+        var query = Key(text); var matches = state.Routines.Keys.Where(x => Key(x) == query).Take(2).ToArray();
+        if (matches.Length > 0) return matches.Length == 1 ? matches[0] : null;
+        foreach (var suffix in new[] { "해줘", "시작해", "시작", "루틴", "모드", "켜", "해" })
+        {
+            if (!query.EndsWith(suffix, StringComparison.Ordinal) || query.Length <= suffix.Length) continue;
+            var stem = query[..^suffix.Length]; matches = state.Routines.Keys.Where(x => Key(x) == stem).Take(2).ToArray();
+            if (matches.Length > 0) return matches.Length == 1 ? matches[0] : null;
+        }
+        return null;
     }
     public static string[] SplitCommands(string text)
     {

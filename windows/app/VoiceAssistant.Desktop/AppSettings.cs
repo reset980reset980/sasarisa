@@ -9,6 +9,8 @@ public partial class MainWindow
 {
     void RefreshRegisteredApps(string? selectedId = null)
     {
+        try { AppRegistry.Default.Reload(); }
+        catch (Exception ex) { AppRegistrationFeedback.Text = ex.Message; return; }
         RegisteredAppsInput.ItemsSource = AppRegistry.Default.Items;
         RegisteredAppsInput.SelectedValue = selectedId;
         RefreshGreetingApps();
