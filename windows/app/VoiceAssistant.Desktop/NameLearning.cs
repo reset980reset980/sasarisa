@@ -11,13 +11,15 @@ public sealed record NameLearningResult(string Name, int Total, int Before, int 
 
 public static class LearnedNames
 {
-    public static string Squash(string text) => string.Concat(text.EnumerateRunes().Where(Rune.IsLetterOrDigit)).ToLowerInvariant();
+    public static string Squash(string text) => string.Concat(text.Normalize(NormalizationForm.FormC).EnumerateRunes().Where(Rune.IsLetterOrDigit)).ToLowerInvariant();
+    public static bool NameRune(Rune rune) => Rune.IsLetterOrDigit(rune) || Rune.IsWhiteSpace(rune) || Rune.GetUnicodeCategory(rune) is System.Globalization.UnicodeCategory.NonSpacingMark or System.Globalization.UnicodeCategory.SpacingCombiningMark;
     public static string Pattern(string word) => string.Join(@"\s*", word.EnumerateRunes().Where(r => !Rune.IsWhiteSpace(r)).Select(r => Regex.Escape(r.ToString())));
     public static string[] For(UiSettings settings, string? name = null) =>
         settings.LearnedWakes.TryGetValue(name ?? settings.Name, out var values) ? values : Array.Empty<string>();
     public static bool Contains(string text, IEnumerable<string> words) => words.Any(word => Pattern(word).Length > 0 && Regex.IsMatch(text, Pattern(word), RegexOptions.IgnoreCase));
     public static string Strip(string text, UiSettings settings)
     {
+        if (settings.Language != "ko") return MultilingualSpeech.AfterWake(text, settings) ?? text.Trim();
         var words = WakePhrases.Active(settings).OrderByDescending(x => x.Count(c => !char.IsWhiteSpace(c)));
         var pattern = string.Join("|", words.Select(Pattern).Where(x => x.Length > 0));
         if (pattern.Length == 0) return text.Trim();
@@ -31,7 +33,7 @@ public static class LearnedNames
             if (string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 20 || pair.Key.Any(char.IsControl) || pair.Value == null || pair.Value.Length > 32)
                 throw new ArgumentException("저장된 이름 보정의 이름과 개수를 확인하세요.");
             foreach (var word in pair.Value)
-                if (word == null || word.Length > 40 || word.Any(char.IsControl) || !NameLearning.Usable(word, 2) || !word.EnumerateRunes().All(r => Rune.IsLetterOrDigit(r) || Rune.IsWhiteSpace(r)))
+                if (word == null || word.Length > 40 || word.Any(char.IsControl) || !NameLearning.Usable(word, 2) || !word.EnumerateRunes().All(NameRune))
                     throw new ArgumentException("이름 보정은 명령이 아닌 2~12글자의 발음만 사용할 수 있어요.");
         }
     }
@@ -40,7 +42,21 @@ public static class LearnedNames
 public sealed class NameLearning
 {
     public const int TotalTakes = 12;
-    static readonly string[] Commands = { "유튜브 틀어", "소리 줄여", "지금 몇 시야", "타이머 3분" };
+    static string[] Commands(string language) => language switch
+    {
+        "ko" => ["유튜브 틀어", "소리 줄여", "지금 몇 시야", "타이머 3분"],
+        "ja" => ["YouTubeを再生して", "音量を下げて", "今何時", "3分のタイマーを設定して"],
+        "zh" => ["播放YouTube", "调低音量", "现在几点", "设置三分钟计时器"],
+        "es" => ["reproduce YouTube", "baja el volumen", "qué hora es", "pon un temporizador de tres minutos"],
+        "fr" => ["ouvre YouTube", "baisse le volume", "quelle heure est-il", "mets un minuteur de trois minutes"],
+        "de" => ["spiele YouTube ab", "mach leiser", "wie spät ist es", "stelle einen Timer auf drei Minuten"],
+        "pt" => ["reproduza o YouTube", "abaixe o volume", "que horas são", "defina um temporizador de três minutos"],
+        "it" => ["riproduci YouTube", "abbassa il volume", "che ore sono", "imposta un timer di tre minuti"],
+        "vi" => ["mở YouTube", "giảm âm lượng", "bây giờ là mấy giờ", "đặt hẹn giờ ba phút"],
+        "th" => ["เปิดยูทูบ", "ลดเสียง", "ตอนนี้กี่โมง", "ตั้งเวลาสามนาที"],
+        "id" => ["putar YouTube", "kecilkan volume", "jam berapa sekarang", "atur pewaktu tiga menit"],
+        _ => ["play YouTube", "turn the volume down", "what time is it", "set a timer for three minutes"]
+    };
     static readonly HashSet<string> Common = new(new[] { "그래서", "아니야", "아니요", "뭐라고", "잠깐만", "있잖아", "그러니까", "알겠어", "고마워", "괜찮아" });
     readonly UiSettings original;
     readonly List<NameTake> takes = new();
@@ -48,7 +64,7 @@ public sealed class NameLearning
     public IReadOnlyList<NameTake> Takes => takes;
     public bool Finished => takes.Count >= TotalTakes;
     public NameLearning(UiSettings settings, string name) { original = SettingsTransfer.Copy(settings); Name = name.Trim(); }
-    public string Command => takes.Count < 8 ? "" : Commands[Math.Min(3, takes.Count - 8)];
+    public string Command => takes.Count < 8 ? "" : Commands(original.Language)[Math.Min(3, takes.Count - 8)];
     public string Prompt => Name + (Command.Length > 0 ? ", " + Command : "");
     public bool Add(string heard, string refined, bool hadWake)
     {
@@ -56,12 +72,12 @@ public sealed class NameLearning
         takes.Add(new(heard, refined, hadWake, Command)); return true;
     }
     public void RetryLast() { if (takes.Count > 0) takes.RemoveAt(takes.Count - 1); }
-    bool Hit(NameTake take) => take.HadWake || LearnedNames.Contains(take.Heard, LearnedNames.For(original, Name).Append(Name)) ||
-        LearnedNames.Contains(take.Refined, LearnedNames.For(original, Name).Append(Name));
+    bool Hit(NameTake take) => take.HadWake || LearnedNames.Contains(take.Heard, WakePhrases.Active(original with { Name = Name, WakeWords = [] })) ||
+        LearnedNames.Contains(take.Refined, WakePhrases.Active(original with { Name = Name, WakeWords = [] }));
     public NameLearningResult Result()
     {
         var before = takes.Count(Hit); var seen = new Dictionary<string, int>();
-        var target = HangulReading(Name) ?? Name;
+        var target = original.Language == "ko" ? HangulReading(Name) ?? Name : Name;
         var minimum = Math.Max(2, Math.Min(3, LearnedNames.Squash(target).Length));
         foreach (var take in takes.Where(t => !Hit(t)))
             foreach (var candidate in new[] { take.Heard, take.Refined }.Select(Normalize).Select(t => WithoutCommand(t, take.Command)).Where(t => t != null).Distinct())
@@ -77,7 +93,7 @@ public sealed class NameLearning
         var next = SettingsTransfer.Copy(settings); next.Name = Name; next.LearnedWakes[Name] = Result().Learned;
         SettingsStore.Validate(next); return next;
     }
-    public static string Normalize(string text) => Regex.Replace(Regex.Replace(text, @"[~∼〜!?.,]+", " ").ToLowerInvariant().Trim(), @"\s+", " ");
+    public static string Normalize(string text) => Regex.Replace(Regex.Replace(text.Normalize(NormalizationForm.FormC), @"[~∼〜!?.,]+", " ").ToLowerInvariant().Trim(), @"\s+", " ");
     public static string? WithoutCommand(string text, string command)
     {
         if (command.Length == 0) return text;
@@ -90,7 +106,7 @@ public sealed class NameLearning
     public static bool Usable(string text, int minimum)
     {
         var word = LearnedNames.Squash(text);
-        return word.Length >= minimum && word.Length <= 12 && text.EnumerateRunes().All(r => Rune.IsLetterOrDigit(r) || Rune.IsWhiteSpace(r)) && !Common.Contains(word) && CommandParser.Parse(text) == null;
+        return word.Length >= minimum && word.Length <= 12 && text.EnumerateRunes().All(LearnedNames.NameRune) && !Common.Contains(word) && CommandParser.Parse(text) == null;
     }
     static int[] Jamo(string text) => LearnedNames.Squash(text).EnumerateRunes().SelectMany(r =>
     {

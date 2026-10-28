@@ -20,7 +20,9 @@ internal static class WakePhrases
     }
     // Explicit phrases replace the name and its learned pronunciations, as on macOS.
     public static string[] Active(UiSettings settings) => (settings.WakeWords.Length > 0 ? settings.WakeWords :
-        new[] { settings.Name, NameLearning.HangulReading(settings.Name) ?? settings.Name }.Concat(LearnedNames.For(settings)))
+        new[] { settings.Name, settings.Language == "ko" ? NameLearning.HangulReading(settings.Name) ?? settings.Name : settings.Name }.Concat(LearnedNames.For(settings)).Concat(
+            settings.Language != "ko" && LearnedNames.Squash(settings.Name) is "자비스" or "jarvis" ?
+                settings.Language switch { "ja" => new[] { "ジャービス", "jarvis" }, "zh" => new[] { "贾维斯", "jarvis" }, _ => new[] { "jarvis" } } : Array.Empty<string>()))
         .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     public static string Cue(UiSettings settings)
     {

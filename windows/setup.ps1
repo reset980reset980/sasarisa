@@ -4,6 +4,7 @@ Set-Location $PSScriptRoot
 if ($LASTEXITCODE -ne 0) { throw 'Speech environment setup failed.' }
 & (Join-Path $PSScriptRoot 'poc\.venv\Scripts\python.exe') -m pip check
 if ($LASTEXITCODE -ne 0) { throw 'Speech dependency check failed.' }
+& (Join-Path $PSScriptRoot 'prepare-vad.ps1') | Out-Null
 $model = Join-Path $PSScriptRoot 'poc\models\sherpa-onnx-streaming-zipformer-korean-2024-06-16'
 foreach ($file in @('tokens.txt','bpe.model','encoder-epoch-99-avg-1.int8.onnx','decoder-epoch-99-avg-1.int8.onnx','joiner-epoch-99-avg-1.int8.onnx')) {
     if (-not (Test-Path -LiteralPath (Join-Path $model $file))) { throw "Incomplete speech model: $file" }

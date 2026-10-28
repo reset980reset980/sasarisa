@@ -40,11 +40,11 @@ internal static class MacSettingsChecks
             Require(value.Device == current.Device && value.VoiceId == current.VoiceId && value.OutputId == current.OutputId && value.SpeechRate == current.SpeechRate && value.SpeechVolume == current.SpeechVolume && value.ProjectDirectory == current.ProjectDirectory && value.WhisperUrl == current.WhisperUrl && value.Desktop.WakeHotkey == current.Desktop.WakeHotkey && value.Desktop.StartupListening == "off" && !value.ProRemote && value.GrowTogether == "off", "Mac platform/access settings changed local choices");
             Require(converted.Notices.Any(n => n.Contains("자유 모드")) && converted.Notices.Any(n => n.Contains("휴대폰")), "Excluded settings hidden");
         });
-        Check("Partial Mac files retain omitted settings and expose language and unknown-field exclusions", () =>
+        Check("Partial Mac files retain omitted settings and convert language while excluding unknown fields", () =>
         {
-            var current = Current(); current.LearnedWakes["윈도우"] = ["윈도"]; var before = JsonSerializer.Serialize(current);
+            var current = Current(); current.LearnedWakes["윈도우"] = ["윈도"]; var before = JsonSerializer.Serialize(current with { Language = "en" });
             var result = MacSettingsTransfer.Parse("{\"language\":\"en\",\"futureField\":\"fixture-secret\"}", current);
-            Require(JsonSerializer.Serialize(result.Settings) == before && result.Notices.Any(n => n.Contains("한국어")) && result.Notices.Any(n => n.Contains("1개")), "Partial or excluded fields changed data");
+            Require(JsonSerializer.Serialize(result.Settings) == before && result.Notices.Any(n => n.Contains("Whisper")) && result.Notices.Any(n => n.Contains("1개")), "Partial or excluded fields changed data");
             Require(!JsonSerializer.Serialize(result).Contains("fixture-secret"), "Excluded value leaked");
         });
         Check("Mac provider IDs, default endpoints and Claude profiles map to actual Windows providers", () =>

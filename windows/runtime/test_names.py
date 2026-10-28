@@ -3,6 +3,11 @@ from speech_worker import wake_pattern
 
 
 class NameChecks(unittest.TestCase):
+    def test_learned_combining_marks_remain_valid_after_switching_languages(self):
+        for phrase in ('จาร์วิส', 'Rene\u0301'):
+            pattern = wake_pattern(dict(Name='Jarvis', LearnedWakes={'Jarvis': [phrase]}))
+            self.assertIsNotNone(pattern.search(phrase))
+
     def test_learned_phrase_and_command_boundary(self):
         cfg = dict(Name='사사리사', LearnedWakes={'사사리사': ['서서', '서서 있어']})
         pattern = wake_pattern(cfg)

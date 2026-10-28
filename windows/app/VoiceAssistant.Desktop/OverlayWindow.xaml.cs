@@ -17,12 +17,14 @@ public partial class OverlayWindow : Window
     private bool _idle;
     private bool _dismissed;
     private DesktopPreferences _preferences = new();
+    private readonly bool _allowPresentation;
 
     public event Action? WakeRequested;
     public event Action? StopRequested;
 
-    public OverlayWindow()
+    public OverlayWindow(bool allowPresentation = true)
     {
+        _allowPresentation = allowPresentation;
         InitializeComponent();
         SourceInitialized += (_, _) =>
         {
@@ -48,6 +50,7 @@ public partial class OverlayWindow : Window
     {
         _dismissed = false;
         UpdateAssistantLabel();
+        if (!_allowPresentation) return;
         if (!IsVisible) Show();
         if (!_dragged || !_positioned) PositionAtCorner();
     });

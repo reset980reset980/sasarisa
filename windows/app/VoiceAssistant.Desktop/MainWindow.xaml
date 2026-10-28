@@ -103,6 +103,11 @@
                         <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="13" Padding="22" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="목소리로 시작하기" FontSize="17" FontWeight="SemiBold" /><TextBlock Text="호출과 명령 인식의 감도를 사용 환경에 맞게 조절합니다." Style="{StaticResource HelpText}" Margin="0,6,0,20" />
+                                <StackPanel x:Name="ConversationLanguageSection" Margin="0,0,0,18">
+                                    <TextBlock Text="대화 언어" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox x:Name="LanguageInput" DisplayMemberPath="Label" SelectedValuePath="Code" SelectionChanged="LanguageInput_SelectionChanged" AutomationProperties.Name="대화 언어" />
+                                    <TextBlock x:Name="LanguageHelp" Style="{StaticResource HelpText}" TextWrapping="Wrap" />
+                                </StackPanel>
                                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <StackPanel><TextBlock Text="호출 이름" Style="{StaticResource FieldLabel}" /><TextBox x:Name="NameInput" Text="자비스" Style="{StaticResource Field}" /><TextBlock Text="짧고 분명하게 발음할 수 있는 이름" Style="{StaticResource HelpText}" /><Button Content="내 목소리로 이름 맞추기" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="10,6" Style="{StaticResource SecondaryButton}" Click="NameTraining_Click" /></StackPanel>
                                     <StackPanel Grid.Column="2"><TextBlock Text="호출 방식" Style="{StaticResource FieldLabel}" /><ComboBox x:Name="ActivationInput" SelectedIndex="0"><ComboBoxItem Content="이름을 부르거나 단축키" Tag="voice" /><ComboBoxItem Content="단축키로만 호출" Tag="hotkey" /><ComboBoxItem Content="키를 누르는 동안만 듣기" Tag="hold" /></ComboBox><TextBlock x:Name="SettingsHotkeyHelp" Text="Ctrl + Shift + Space로 바로 말하기" Style="{StaticResource HelpText}" /></StackPanel>

@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--multilingual-native"))
+        {
+            failed = await MultilingualNativeChecks.RunAsync(rows);
+            var report = Path.Combine(AppPaths.WindowsRoot, "artifacts", "multilingual-native-checks.json"); Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, microphoneCapture = false, speakerPlayback = false, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--conversation-language-only"))
         {
             failed = await ConversationLanguageChecks.RunAsync(rows);

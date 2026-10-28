@@ -15,12 +15,14 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import wave
 
 import numpy as np
 import sherpa_onnx
 from acoustics import periodicity, PreRoll
 from input_devices import device_options, bind_input
+from multilingual import MultilingualRecognizer, validate_language
 
 WINDOWS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WINDOWS / "poc"))
@@ -124,7 +126,11 @@ def wake_words(cfg):
     if not isinstance(aliases, list) or len(aliases) > 32:
         raise ValueError("이름 보정 발음 개수를 확인하세요.")
     for word in aliases:
-        if not isinstance(word, str) or len(word) > 40 or not 2 <= len(''.join(word.split())) <= 12 or not all(c.isalnum() or c == ' ' for c in word):
+        if not isinstance(word, str) or len(word) > 40:
+            raise ValueError("이름 보정은 2~12글자의 발음이어야 합니다.")
+        normalized = unicodedata.normalize('NFC', word)
+        letters = ''.join(c for c in normalized if c.isalnum())
+        if not 2 <= len(letters.encode('utf-16-le')) // 2 <= 12 or not all((c.isalnum() or c.isspace() or unicodedata.category(c) in ('Mn', 'Mc')) and unicodedata.category(c) != 'Cc' for c in word):
             raise ValueError("이름 보정은 2~12글자의 발음이어야 합니다.")
     return list(dict.fromkeys([name, h] + aliases))
 
@@ -313,10 +319,11 @@ def main():
     if a.devices:
         devices(); return
     cfg = json.loads(Path(a.config).read_text(encoding="utf-8-sig")) if a.config else json.loads(sys.stdin.readline())
+    language = validate_language(cfg)
     if not a.wav:
         import sounddevice as sd
         input_options = bind_input(sd, cfg.get('Device', ''))
-    recognizer = Recognizer(cfg)
+    recognizer = Recognizer(cfg) if language == 'ko' else MultilingualRecognizer(cfg, emit)
     if a.wav:
         import soundfile as sf
         x, sr = sf.read(a.wav, dtype="float32", always_2d=True)

@@ -91,6 +91,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LanguageInput.ItemsSource = ConversationLanguage.All;
         Closed += (_, _) => { _apiRequest?.Cancel(); _asideRequest?.Cancel(); };
         CommandInput.TextChanged += (_, _) => InputPlaceholder.Visibility =
             string.IsNullOrEmpty(CommandInput.Text) ? Visibility.Visible : Visibility.Collapsed;
@@ -206,6 +207,7 @@ public partial class MainWindow : Window
         _activation = settings.Activation;
         ApplyAssistantName(settings.Name);
         NameInput.Text = settings.Name;
+        LanguageInput.SelectedValue = settings.Language;
         WakeWordsInput.Text = string.Join(Environment.NewLine, settings.WakeWords);
         _selectedDevice = settings.Device;
         _inputDeviceSource = settings.Device;
@@ -339,13 +341,14 @@ public partial class MainWindow : Window
     {
         if(!int.TryParse(SpeechRateInput.Text,out var rate)||rate< -5||rate>5){SettingsError("읽기 속도는 -5~5 사이 정수입니다.",SpeechRateInput);return null;}
         if(!int.TryParse(SpeechVolumeInput.Text,out var volume)||volume<0||volume>100){SettingsError("답변 음량은 0~100 사이 정수입니다.",SpeechVolumeInput);return null;}
-        return new UiSettings{VoiceId=(VoiceInput.SelectedItem as DeviceOption)?.Id??"",OutputId=(OutputInput.SelectedItem as DeviceOption)?.Id??"",SpeechRate=rate,SpeechVolume=volume,Tts=voicePreferences with { },BargeIn=(BargeInInput.SelectedItem as ComboBoxItem)?.Tag?.ToString()??"auto"};
+        return new UiSettings{Language=LanguageInput.SelectedValue as string??"ko",VoiceId=(VoiceInput.SelectedItem as DeviceOption)?.Id??"",OutputId=(OutputInput.SelectedItem as DeviceOption)?.Id??"",SpeechRate=rate,SpeechVolume=volume,Tts=voicePreferences with { },BargeIn=(BargeInInput.SelectedItem as ComboBoxItem)?.Tag?.ToString()??"auto"};
     }
     private void RefreshDevices_Click(object sender, RoutedEventArgs e) => RefreshDevicesRequested?.Invoke();
     private void QuitButton_Click(object sender, RoutedEventArgs e) => QuitRequested?.Invoke();
     private void Personal_Click(object sender, RoutedEventArgs e) => PersonalRequested?.Invoke();
     private void NameTraining_Click(object sender, RoutedEventArgs e)
     {
+        if ((LanguageInput.SelectedValue as string ?? "ko") != _loadedSettings.Language) { SettingsError("언어 변경을 먼저 저장한 뒤 이름을 맞춰 주세요.", LanguageInput); return; }
         var name = NameInput.Text.Trim();
         if (string.IsNullOrWhiteSpace(name) || name.Length > 20 || System.Linq.Enumerable.Any(name, char.IsControl)) { SettingsError("호출 이름은 1~20자로 입력하세요.", NameInput); return; }
         if (DeviceInput.SelectedItem is DeviceOption { Unavailable: true }) { SettingsError("입력 마이크를 연결하거나 다른 마이크를 선택하세요.", DeviceInput); return; }
@@ -418,6 +421,7 @@ public partial class MainWindow : Window
         var settings = _loadedSettings with
         {
             Name = NameInput.Text.Trim(),
+            Language = LanguageInput.SelectedValue as string ?? "ko",
             WakeWords = wakeWords,
             LearnedWakes = new(_loadedSettings.LearnedWakes),
             Device = (DeviceInput.SelectedItem as DeviceOption)?.Id ?? _selectedDevice,

@@ -52,14 +52,64 @@ internal static class ConversationLanguageChecks
             Require(SettingsTransfer.Describe(before, prepared).Contains("日本語"), "Language change missing from review");
             return Task.CompletedTask;
         });
-        await Check("Non-Korean streaming fails before any worker starts while the multilingual capture path is unfinished", () =>
+        await Check("Mac language locales import independently of connection opt-in and omitted languages remain unchanged", () =>
+        {
+            var current = new UiSettings { Language = "fr" };
+            Require(MacSettingsTransfer.Parse("{\"assistantName\":\"자비스\"}", current).Settings.Language == "fr", "Omitted language reset");
+            foreach (var item in ConversationLanguage.All)
+            {
+                var imported = MacSettingsTransfer.Parse(JsonSerializer.Serialize(new { language = item.Locale }), current).Settings;
+                Require(SettingsTransfer.Prepare(imported, current, false, false).Language == item.Code, "Language excluded as a connection setting");
+            }
+            foreach (var bad in new[] { "xx", "en\n", "en/ko" }) Reject(() => MacSettingsTransfer.Parse(JsonSerializer.Serialize(new { language = bad }), current));
+            return Task.CompletedTask;
+        });
+        await Check("Primary recognition obeys wake boundaries sessions confidence dictation and explicit phrase overrides", () =>
+        {
+            var options = new UiSettings { Language = "en", Name = "Jarvis" };
+            WhisperTranscript Heard(string text, double p = .99) => new(text, new[] { new WhisperWord(text, p) });
+            var wake = MultilingualSpeech.Decide(options, Heard("Hey Jarvis, what time is it?"), false, false);
+            Require(wake.Accepted && wake.Wake && wake.Text == "what time is it?", "Wake and command lost");
+            Require(!MultilingualSpeech.Decide(options, Heard("Jarvisology set a timer"), false, false).Accepted, "Name prefix inside a word activated");
+            Require(LearnedNames.Strip("Jarvisology is a word", options) == "Jarvisology is a word", "Command submission stripped a name prefix inside a word");
+            Require(!MultilingualSpeech.Decide(options, Heard("set a timer"), false, false).Accepted, "Unrequested speech executed");
+            Require(MultilingualSpeech.Decide(options, Heard("set a timer"), true, false).Text == "set a timer", "Follow-up lost");
+            Require(!MultilingualSpeech.Decide(options, Heard("Jarvis set a timer", .1), true, false).Accepted, "Uncertain primary transcript executed");
+            Require(!MultilingualSpeech.Decide(options, Heard("Thanks for watching"), true, false).Accepted, "Subtitle hallucination accepted");
+            Require(!MultilingualSpeech.Decide(options with { Activation = "hotkey" }, Heard("Jarvis set a timer"), false, false).Accepted, "Hotkey mode activated without a session");
+            Require(MultilingualSpeech.Decide(options, Heard("Jarvis is a name"), true, true).Text == "Jarvis is a name", "Dictated name was stripped");
+            Require(!MultilingualSpeech.Decide(options with { WakeWords = ["Coco"] }, Heard("Jarvis set a timer"), false, false).Accepted, "Explicit phrase did not replace name");
+            Require(MultilingualSpeech.Decide(options with { Language = "zh", Name = "贾维斯" }, Heard("贾维斯现在几点？"), false, false).Text == "现在几点？", "Unspaced Chinese command lost");
+            Require(MultilingualSpeech.Decide(options with { Language = "ja", Name = "자비스" }, Heard("ジャービス、今何時？"), false, false).Text == "今何時？", "Japanese default name alias missing");
+            Require(MultilingualSpeech.Decide(options with { Language = "th", Name = "จาร์วิส" }, Heard("จาร์วิสตอนนี้กี่โมง"), false, false).Text == "ตอนนี้กี่โมง", "Thai combining marks lost");
+            Require(MultilingualSpeech.Decide(options with { Language = "fr", Name = "Rene\u0301" }, Heard("René, quelle heure est-il?"), false, false).Text == "quelle heure est-il?", "Canonical name equivalence lost");
+            SettingsStore.Validate(options with { LearnedWakes = new() { [options.Name] = ["จาร์วิส", "Rene\u0301"] } });
+            return Task.CompletedTask;
+        });
+        await Check("Multilingual streaming requires a Whisper connection before any worker starts", () =>
         {
             using var input = new SpeechInput();
             foreach (var item in ConversationLanguage.All.Where(x => x.Code != "ko"))
             {
                 try { input.Start(new UiSettings { Language = item.Code }); throw new Exception("Korean worker started for a different language"); }
-                catch (NotSupportedException) { }
+                catch (ArgumentException) { }
                 Require(!input.Running && input.ProcessId == 0 && input.Generation == 0, "An unsupported language started capture");
+                MultilingualSpeech.ValidateInput(new UiSettings { Language = item.Code, WhisperMode = "cpu" });
+                MultilingualSpeech.ValidateInput(new UiSettings { Language = item.Code, WhisperUrl = "http://127.0.0.1:23456" });
+            }
+            return Task.CompletedTask;
+        });
+        await Check("Name training uses the conversation language while preserving language and explicit wake settings", () =>
+        {
+            foreach (var language in ConversationLanguage.All)
+            {
+                var options = new UiSettings { Language = language.Code, Name = "Jarvis", WakeWords = ["Custom wake"] };
+                var learning = new NameLearning(options, "Jarvis");
+                for (int i = 0; i < 8; i++) Require(learning.Add("Jarvis", "", true), "Name take rejected");
+                Require(learning.Command.Length > 0 && (language.Code == "ko" || !learning.Command.Any(c => c is >= '가' and <= '힣')), "Name training retained Korean prompts");
+                for (int i = 0; i < 4; i++) Require(learning.Add(learning.Prompt, "", true), "Command take rejected");
+                var next = learning.ApplyTo(options);
+                Require(next.Language == language.Code && next.WakeWords.SequenceEqual(options.WakeWords), "Name training changed language or wake override");
             }
             return Task.CompletedTask;
         });

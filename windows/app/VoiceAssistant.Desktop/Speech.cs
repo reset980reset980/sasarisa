@@ -44,8 +44,7 @@ public sealed class SpeechInput : IDisposable
     }
     public void Start(UiSettings settings)
     {
-        if (ConversationLanguage.Get(settings.Language).Code != "ko")
-            throw new NotSupportedException("선택한 언어의 실시간 음성 입력은 아직 지원되지 않아요. 한국어를 선택하거나 텍스트로 명령하세요.");
+        MultilingualSpeech.ValidateInput(settings);
         if (Running) return;
         var p = new Process { StartInfo = PythonInfo(), EnableRaisingEvents = true }; process = p; captureProcessId = 0; CaptureRequest = 0;
         var generation = ++Generation;

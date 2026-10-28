@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-device-app-only")) { Shutdown(InputDeviceAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--codex-effort-app-only")) { Shutdown(CodexEffortAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--wake-phrase-app-only")) { Shutdown(WakePhraseAppChecks.Run()); return; }
@@ -123,7 +124,7 @@ public partial class App : System.Windows.Application
         if (personal.Error != null) window.AddMessage("error", personal.Error);
         await RefreshDevices();
         if(closing)return;
-        if (!settings.Desktop.SetupComplete || !SetupReadiness.HasSpeechEnvironment) ShowSetup();
+        if (!settings.Desktop.SetupComplete || !SetupReadiness.HasSpeechEnvironmentFor(settings)) ShowSetup();
         RestoreListening(e.Args.Contains("--listen"));
         RestartRemote();
         RestartGrow();
@@ -165,6 +166,7 @@ public partial class App : System.Windows.Application
     void Tick()
     {
         hands.TrackForeground();
+        if (listening && settings.Language != "ko") WhisperEngine.Shared.KeepWarm();
         ReconcileMicrophonePause();
         CheckSpeechTail();
         CheckMicrophoneHealth();
@@ -204,6 +206,13 @@ public partial class App : System.Windows.Application
         if (settings.Activation == "hold" && hotkeys?.Wake == null) { ShowError("말하기 단축키를 사용할 수 없어요. 설정에서 다른 단축키나 호출 방식을 선택하세요."); return; }
         try
         {
+            if (settings.Language != "ko")
+            {
+                MultilingualSpeech.ValidateInput(settings);
+                starting = true; RefreshStatus();
+                var own = new CancellationTokenSource(); languageStartup = own;
+                languageStartupTask = StartMultilingualInputAsync(settings, own, automatic); return;
+            }
             lastUtterance = 0; microphoneHealth.Begin(manual: !automatic); automaticSpeechStart = automatic;
             microphoneStartedAt = DateTimeOffset.UtcNow; starting = true; input.Start(settings); RefreshStatus();
         }
@@ -241,6 +250,7 @@ public partial class App : System.Windows.Application
     }
     void StopTurn()
     {
+        CancelMultilingualStartup();
         CancelWakeCheck();
         EndSpeechBarge(true, false); waitingBarge = false; bargeInputUntil = DateTimeOffset.MinValue;
         microphonePause.EndManual();
@@ -291,6 +301,12 @@ public partial class App : System.Windows.Application
             case "wake": if (listening && !speaking && !busy && settings.Activation == "voice") { CancelWakeCheck(); awakeUntil = DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds); overlay.SetContent("말씀하세요", "이름을 들었어요. 이어서 말씀하세요.", false); overlay.ShowOverlay(); RefreshStatus(); } break;
             case "final":
                 signalFinals++;
+                if (message.TryGetProperty("needs_transcription", out var primary) && primary.ValueKind == JsonValueKind.True)
+                {
+                    if (settings.Language == "ko" || !listening || busy && !speaking) break;
+                    var segment = message.GetProperty("utterance").GetInt32(); if (segment <= lastUtterance) break; lastUtterance = segment;
+                    BeginMultilingualRecognition(message); break;
+                }
                 if (speaking) TryBargeText(message);
                 if (!listening || speaking || busy) break;
                 var id = message.GetProperty("utterance").GetInt32(); if (id <= lastUtterance) break; lastUtterance = id;
@@ -307,7 +323,7 @@ public partial class App : System.Windows.Application
             case "warning": if (DateTimeOffset.Now - lastWarning > TimeSpan.FromSeconds(10)) { lastWarning = DateTimeOffset.Now; window.AddMessage("system", message.GetProperty("message").GetString() ?? ""); } break;
         }
     }
-    async Task SubmitAsync(string text, bool voice, string? wav = null, bool interruptedSpeech = false)
+    async Task SubmitAsync(string text, bool voice, string? wav = null, bool interruptedSpeech = false, WindowsActions.InputTarget? dictationInputTarget = null)
     {
         CancelWakeCheck();
         var isDictation = dictating && voice;
@@ -320,7 +336,7 @@ public partial class App : System.Windows.Application
         busy = true; CaptureInput(false); RefreshStatus();
         try
         {
-            var dictationTarget = isDictation ? hands.CaptureInputTarget() : null;
+            var dictationTarget = isDictation ? dictationInputTarget ?? hands.CaptureInputTarget() : null;
             if (voice && !string.IsNullOrWhiteSpace(wav) && WhisperEngine.Enabled(settings) && (isDictation || !WhisperText.Quick(parsed)))
             {
                 window.SetStatus("문장을 다듬어 듣는 중", "로컬 Whisper 서버에서 확인하고 있어요.", listening, true);

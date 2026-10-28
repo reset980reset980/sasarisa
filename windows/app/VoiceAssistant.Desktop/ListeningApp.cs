@@ -18,7 +18,7 @@ public partial class App
     void RestoreListening(bool explicitListen)
     {
         if (explicitListen) RememberListening(true);
-        var ready = settings.Desktop.SetupComplete && SetupReadiness.HasSpeechEnvironment && setupWindow == null;
+        var ready = settings.Desktop.SetupComplete && SetupReadiness.HasSpeechEnvironmentFor(settings) && setupWindow == null;
         var start = listeningState.ShouldStart(settings.Desktop.StartupListening, ready, explicitListen);
         AppPaths.Log("listening-startup", $"mode={settings.Desktop.StartupListening}; requested={listeningState.Requested}; ready={ready}; start={start}");
         if (start) { RememberListening(true); StartListening(automatic: true); }

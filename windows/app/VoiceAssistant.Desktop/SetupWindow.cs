@@ -17,6 +17,7 @@ public static class SetupReadiness
     public static readonly string[] ModelFiles = { "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.int8.onnx", "joiner-epoch-99-avg-1.int8.onnx", "tokens.txt", "bpe.model" };
     public static bool HasModel(string folder) => ModelFiles.All(name => File.Exists(Path.Combine(folder, name)) && new FileInfo(Path.Combine(folder, name)).Length > 0);
     public static bool HasSpeechEnvironment => File.Exists(AppPaths.Python) && File.Exists(AppPaths.Worker) && HasModel(AppPaths.Model);
+    public static bool HasSpeechEnvironmentFor(UiSettings settings) => settings.Language == "ko" ? HasSpeechEnvironment : File.Exists(AppPaths.Python) && File.Exists(AppPaths.Worker) && File.Exists(AppPaths.VadModel);
     public static string BrainStatus(UiSettings settings)
     {
         if (settings.BrainProvider == "combo") return ComboBrain.Status();

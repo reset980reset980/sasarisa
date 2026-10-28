@@ -58,15 +58,16 @@ public static class MacSettingsTransfer
             if (root.EnumerateObject().Any(p => p.Name is "greetingText" or "bootTitle" or "bootSubtitle" && p.Value.ValueKind == JsonValueKind.String && p.Value.GetString()!.Length == 0) || Any("greetPhrases") && next.Desktop.GreetingPhrases.Length == 0 || next.Desktop.GreetingTitle.Length == 0 && Text(root, "bootTitle") == "M A C   B U T L E R")
                 notes.Add("비어 있는 인사 문장·화면 제목·부제는 Windows 기본값을 사용합니다.");
             if (Any("customWords")) next.Text.CustomWords = Words("customWords");
-            var language = Text(root, "language", "ko");
+            var language = Text(root, "language", current.Language);
+            if (Any("language")) next.Language = ConversationLanguage.FromMac(language);
             if (Any("fillerWords"))
             {
-                var words = Words("fillerWords"); next.Text.FillerWords = words.Length > 0 ? words : language.StartsWith("ko", StringComparison.Ordinal) ? ["음", "으음", "어어", "음음"] : ["um", "uh", "erm"];
+                var words = Words("fillerWords"); next.Text.FillerWords = words.Length > 0 ? words : next.Language == "ko" ? ["음", "으음", "어어", "음음"] : ["um", "uh", "erm"];
                 next.Text.RemoveFillers = true;
             }
             Flag("polishDictation", v => next.Text.PolishDictation = v);
             if (next.Text.PolishDictation && Any("polishDictation")) notes.Add("받아쓰기 다듬기는 Apple Intelligence 대신 Windows에서 선택한 AI 연결을 사용합니다.");
-            if (!language.StartsWith("ko", StringComparison.Ordinal)) notes.Add("macOS의 언어 선택은 가져오지 않습니다. 현재 Windows 인식 모델은 한국어입니다.");
+            if (next.Language != "ko" && Any("language")) notes.Add("대화 언어를 가져왔습니다. 다국어 음성 입력에는 Windows의 로컬 Whisper 엔진 또는 호환 서버가 필요하며, 화면 메뉴는 한국어로 표시됩니다.");
             if (Any("learnedWakes"))
             {
                 var value = root.GetProperty("learnedWakes"); if (value.ValueKind != JsonValueKind.Object) throw Invalid("learnedWakes");

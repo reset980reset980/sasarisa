@@ -15,7 +15,7 @@ public partial class App
     {
         settings = new UiSettings { Name = "폰시험", Speak = false, ProRemote = false };
         personal = new Personalization(Path.Combine(AppPaths.Home, "personal.json")); timers = new TimerStore(Path.Combine(AppPaths.Home, "timers.json"));
-        window = new MainWindow(); overlay = new OverlayWindow(); MainWindow = window; window.LoadSettings(settings); overlay.Configure(settings.Desktop);
+        window = new MainWindow(); overlay = new OverlayWindow(allowPresentation: false); MainWindow = window; window.LoadSettings(settings); overlay.Configure(settings.Desktop);
     }
     async Task<int> RunInternetPhoneAppChecksAsync(bool ai = false)
     {

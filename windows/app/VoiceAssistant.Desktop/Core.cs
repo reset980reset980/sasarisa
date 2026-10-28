@@ -17,6 +17,7 @@ public static class AppPaths
     public static string ConfigFile => Path.Combine(Home, "config.json");
     public static string Python => File.Exists(Path.Combine(WindowsRoot, "python", "python.exe")) ? Path.Combine(WindowsRoot, "python", "python.exe") : Path.Combine(WindowsRoot, "poc", ".venv", "Scripts", "python.exe");
     public static string Worker => Path.Combine(WindowsRoot, "runtime", "speech_worker.py");
+    public static string VadModel => File.Exists(Path.Combine(WindowsRoot, "runtime", "assets", "silero_vad.onnx")) ? Path.Combine(WindowsRoot, "runtime", "assets", "silero_vad.onnx") : Path.Combine(WindowsRoot, "artifacts", "package-cache", "silero_vad.onnx");
     public const string ModelName = "sherpa-onnx-streaming-zipformer-korean-2024-06-16";
     public static string UserModel => Path.Combine(Home, "models", ModelName);
     public static string Model => SetupReadiness.HasModel(UserModel) ? UserModel : Directory.Exists(Path.Combine(WindowsRoot, "poc", "models", ModelName)) ? Path.Combine(WindowsRoot, "poc", "models", ModelName) : UserModel;

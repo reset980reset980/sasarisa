@@ -15,6 +15,7 @@ public partial class App
         awakeUntil <= DateTimeOffset.Now && !microphonePause.Blocked && !speechCapturePending && !waitingBarge && DateTimeOffset.UtcNow >= speechTailUntil;
     void CancelWakeCheck()
     {
+        CancelMultilingualRecognition();
         var previous = wakeCheck; wakeCheck = null; previous?.Cancel();
     }
     void CheckMissedWake(JsonElement message)

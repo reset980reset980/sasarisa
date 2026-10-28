@@ -1,4 +1,4 @@
-﻿param([string]$Version = '0.2.44')
+﻿param([string]$Version = '0.2.45')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be major.minor.build' }
 $root = $PSScriptRoot
@@ -30,11 +30,16 @@ New-Item -ItemType Directory -Force (Join-Path $stage 'runtime'),(Join-Path $sta
 Copy-Item -LiteralPath (Join-Path $root 'runtime\speech_worker.py') -Destination (Join-Path $stage 'runtime')
 Copy-Item -LiteralPath (Join-Path $root 'runtime\acoustics.py') -Destination (Join-Path $stage 'runtime')
 Copy-Item -LiteralPath (Join-Path $root 'runtime\input_devices.py') -Destination (Join-Path $stage 'runtime')
+Copy-Item -LiteralPath (Join-Path $root 'runtime\multilingual.py') -Destination (Join-Path $stage 'runtime')
+$vadModel = & (Join-Path $root 'prepare-vad.ps1')
+New-Item -ItemType Directory -Force (Join-Path $stage 'runtime\assets') | Out-Null
+Copy-Item -LiteralPath $vadModel -Destination (Join-Path $stage 'runtime\assets\silero_vad.onnx')
 Copy-Item -LiteralPath (Join-Path $root 'runtime\check_runtime.py') -Destination (Join-Path $stage 'runtime')
 Copy-Item -LiteralPath (Join-Path $root 'poc\wake_poc.py') -Destination (Join-Path $stage 'poc')
 Copy-Item -LiteralPath (Join-Path $root '..\LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'README.md'),(Join-Path $root 'FEATURE_PARITY.md'),(Join-Path $root 'TOOLS_PARITY.md'),(Join-Path $root 'VERIFICATION.md') -Destination $stage
 New-Item -ItemType Directory -Force (Join-Path $stage 'Notices') | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'runtime\Silero-LICENSE.txt') -Destination (Join-Path $stage 'Notices')
 foreach ($package in @('microsoft.netcore.app.runtime.win-x64\10.0.5','microsoft.windowsdesktop.app.runtime.win-x64\10.0.5','microsoft.aspnetcore.app.runtime.win-x64\10.0.5','microsoft.web.webview2\1.0.4314.35')) {
     $packageRoot = Join-Path (Join-Path $env:USERPROFILE '.nuget\packages') $package
     $noticeDir = Join-Path (Join-Path $stage 'Notices') ($package.Replace('\','-'))

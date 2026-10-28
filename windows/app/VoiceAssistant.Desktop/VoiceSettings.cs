@@ -70,11 +70,11 @@ public sealed class VoiceSettingsWindow : Window
         Closed += (_,_) => { key.Clear(); StopRequested?.Invoke(); };
     }
     VoicePreferences ReadFields() => new() { Provider = selected, Voice = selected == "pro" ? proVoice.SelectedValue?.ToString() ?? ProAccountClient.Voices[0].Id : voice.Text.Trim(), Model = model.Text.Trim(), Region = region.Text.Trim(), Url = url.Text.Trim(), Speed = double.TryParse(speed.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : double.NaN, Fallback = selected == "pro" || fallback.IsChecked == true };
-    static VoicePreferences Defaults(string id) => id switch
+    VoicePreferences Defaults(string id) => id switch
     {
         "openai" => new() { Provider = id, Voice = "alloy", Model = "gpt-4o-mini-tts" },
         "elevenlabs" => new() { Provider = id, Model = "eleven_flash_v2_5" },
-        "azure" => new() { Provider = id, Voice = "ko-KR-SunHiNeural", Region = "koreacentral" },
+        "azure" => new() { Provider = id, Voice = original.Language == "ko" ? "ko-KR-SunHiNeural" : "", Region = "koreacentral" },
         "http" => new() { Provider = id, Url = "http://127.0.0.1:5002/tts" },
         "pro" => new() { Provider = id, Voice = ProAccountClient.Voices[0].Id },
         _ => new()

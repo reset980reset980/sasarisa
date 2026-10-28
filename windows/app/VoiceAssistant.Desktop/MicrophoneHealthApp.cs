@@ -13,6 +13,8 @@ public partial class App
 
     void StopInput()
     {
+        CancelMultilingualStartup();
+        if (settings.Language != "ko") WhisperEngine.Shared.Stop();
         CancelWakeCheck();
         microphoneRecoveryPending = automaticSpeechStart = waitingBarge = false; speechCapturePending = true;
         microphoneHealth.Stop(); input.Stop(); listening = starting = false;
@@ -39,6 +41,7 @@ public partial class App
     void CheckMicrophoneHealth()
     {
         if (closing) return;
+        if (languageStartup != null) return;
         if (microphoneRecoveryPending)
         {
             if (DateTimeOffset.UtcNow >= microphoneRetryAt && !personalEditorOpen && !busy && !speaking)

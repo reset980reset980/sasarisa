@@ -34,6 +34,7 @@ internal sealed class WhisperEngine : IDisposable
     }
     public static bool Enabled(UiSettings settings) => settings.WhisperMode is "cpu" or "cuda" || settings.WhisperMode == "external" && !string.IsNullOrWhiteSpace(settings.WhisperUrl);
     public int ProcessId { get { lock (sync) return process is { HasExited: false } ? process.Id : 0; } }
+    public void KeepWarm() { lock (sync) if (process is { HasExited: false }) used = DateTime.UtcNow; }
     public string Status { get { lock (sync) return process is { HasExited: false } && endpoint != null ? gpu ? "NVIDIA 가속 준비됨" : "CPU 보정 준비됨" : "보정 엔진 대기 중"; } }
     public async Task InstallAsync(string selectedMode, IProgress<ModelProgress> progress, CancellationToken token)
     {
