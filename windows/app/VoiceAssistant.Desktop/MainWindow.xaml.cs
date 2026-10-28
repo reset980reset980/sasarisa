@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,7 +10,13 @@ using System.Windows.Media;
 
 namespace VoiceAssistant.Desktop;
 
-public sealed record DeviceOption(string Id, string Label);
+public sealed record DeviceOption(string Id, string Label)
+{
+    public string LegacyId { get; init; } = "";
+    public string IdentityKind { get; init; } = "";
+    public bool Unavailable { get; init; }
+    public string RememberedLabel { get; init; } = "";
+}
 
 public sealed record UiSettings
 {
@@ -17,6 +24,7 @@ public sealed record UiSettings
     public Dictionary<string, string[]> LearnedWakes { get; set; } = new();
     public string[] WakeWords { get; set; } = Array.Empty<string>();
     public string Device { get; set; } = "";
+    public string DeviceLabel { get; set; } = "";
     public string Activation { get; set; } = "voice";
     public double SilenceSeconds { get; set; } = 1.2;
     public double FollowUpSeconds { get; set; } = 30;
@@ -53,6 +61,8 @@ public partial class MainWindow : Window
     private static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(49, 93, 231));
     private static readonly Brush Muted = new SolidColorBrush(Color.FromRgb(101, 112, 131));
     private string _selectedDevice = "";
+    private bool _settingInputDevices, _pendingInputDevice;
+    private string _inputDeviceSource = "";
     private string _assistantName = "자비스";
     private string _hotkeyChord = "Ctrl + Shift + Space";
     private string _page = "chat";
@@ -166,11 +176,27 @@ public partial class MainWindow : Window
 
     public void SetDevices(IReadOnlyList<DeviceOption> devices, string selectedId) => OnUi(() =>
     {
-        _selectedDevice = selectedId ?? "";
-        DeviceInput.ItemsSource = devices;
-        DeviceInput.SelectedValue = _selectedDevice;
-        if (DeviceInput.SelectedIndex < 0 && devices.Count > 0) DeviceInput.SelectedIndex = 0;
+        var previous = (_pendingInputDevice || selectedId == _inputDeviceSource) ? DeviceInput.SelectedItem as DeviceOption : null;
+        var remembered = previous is { Unavailable: true } ? previous.RememberedLabel : previous?.Label;
+        ApplyInputDevices(devices, previous?.Id ?? selectedId ?? "", remembered ?? _loadedSettings.DeviceLabel);
+        _inputDeviceSource = selectedId ?? "";
     });
+
+    void ApplyInputDevices(IReadOnlyList<DeviceOption> devices, string id, string label)
+    {
+        var chosen = InputDeviceSelection.Select(devices, id, label);
+        _settingInputDevices = true;
+        try { _selectedDevice = id; DeviceInput.ItemsSource = chosen.Options; DeviceInput.SelectedItem = chosen.Selected; }
+        finally { _settingInputDevices = false; }
+        UpdateInputDeviceHelp();
+    }
+    void DeviceInput_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_settingInputDevices && DeviceInput.SelectedItem != null) _pendingInputDevice = true;
+        UpdateInputDeviceHelp();
+    }
+    void UpdateInputDeviceHelp()
+    { if (InputDeviceHelp != null) InputDeviceHelp.Text = InputDeviceSelection.Help(DeviceInput.SelectedItem as DeviceOption); }
 
     public void LoadSettings(UiSettings settings) => OnUi(() =>
     {
@@ -181,7 +207,10 @@ public partial class MainWindow : Window
         NameInput.Text = settings.Name;
         WakeWordsInput.Text = string.Join(Environment.NewLine, settings.WakeWords);
         _selectedDevice = settings.Device;
-        DeviceInput.SelectedValue = settings.Device;
+        _inputDeviceSource = settings.Device;
+        _pendingInputDevice = false;
+        var available = DeviceInput.ItemsSource is IEnumerable<DeviceOption> known ? System.Linq.Enumerable.Where(known, x => !x.Unavailable).ToArray() : Array.Empty<DeviceOption>();
+        ApplyInputDevices(available, settings.Device, settings.DeviceLabel);
         SelectTag(ActivationInput, settings.Activation);
         SilenceInput.Text = settings.SilenceSeconds.ToString("0.##", CultureInfo.InvariantCulture);
         FollowUpInput.Text = settings.FollowUpSeconds.ToString("0.##", CultureInfo.InvariantCulture);
@@ -318,6 +347,7 @@ public partial class MainWindow : Window
     {
         var name = NameInput.Text.Trim();
         if (string.IsNullOrWhiteSpace(name) || name.Length > 20 || System.Linq.Enumerable.Any(name, char.IsControl)) { SettingsError("호출 이름은 1~20자로 입력하세요.", NameInput); return; }
+        if (DeviceInput.SelectedItem is DeviceOption { Unavailable: true }) { SettingsError("입력 마이크를 연결하거나 다른 마이크를 선택하세요.", DeviceInput); return; }
         NameTrainingRequested?.Invoke(name, DeviceInput.SelectedItem as DeviceOption ?? new(_selectedDevice, "현재 입력 마이크"));
     }
     private void SendButton_Click(object sender, RoutedEventArgs e) => SubmitCommand();
@@ -390,6 +420,7 @@ public partial class MainWindow : Window
             WakeWords = wakeWords,
             LearnedWakes = new(_loadedSettings.LearnedWakes),
             Device = (DeviceInput.SelectedItem as DeviceOption)?.Id ?? _selectedDevice,
+            DeviceLabel = (DeviceInput.SelectedItem as DeviceOption) is { } inputDevice ? inputDevice.Unavailable ? inputDevice.RememberedLabel : inputDevice.Label : _loadedSettings.DeviceLabel,
             Activation = SelectedTag(ActivationInput),
             SilenceSeconds = silence,
             FollowUpSeconds = followUp,

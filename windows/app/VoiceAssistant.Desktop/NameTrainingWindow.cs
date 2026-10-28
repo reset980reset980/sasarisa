@@ -34,7 +34,7 @@ public sealed class NameTrainingWindow : Window
     static Button Button(string title) => new() { Content = title, Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 6, 8, 6) };
     public NameTrainingWindow(UiSettings settings, DeviceOption device, Func<UiSettings, string?> saveSettings)
     {
-        preferences = SettingsTransfer.Copy(settings); preferences.Device = device.Id;
+        preferences = SettingsTransfer.Copy(settings); preferences.Device = device.Id; preferences.DeviceLabel = device.Label;
         learning = new(preferences, preferences.Name); save = saveSettings;
         Title = "내 목소리로 이름 맞추기"; Width = 780; Height = 720; MinWidth = 650; MinHeight = 540;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = Brushes.WhiteSmoke;

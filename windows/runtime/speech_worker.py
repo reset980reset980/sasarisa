@@ -20,6 +20,7 @@ import wave
 import numpy as np
 import sherpa_onnx
 from acoustics import periodicity, PreRoll
+from input_devices import device_options, bind_input
 
 WINDOWS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WINDOWS / "poc"))
@@ -300,13 +301,7 @@ class Recognizer:
 
 def devices():
     import sounddevice as sd
-    default = int(sd.default.device[0])
-    rows = [{"Id": "", "Label": "Windows 기본 마이크"}]
-    for i, d in enumerate(sd.query_devices()):
-        if d["max_input_channels"] > 0:
-            host = sd.query_hostapis(d["hostapi"])["name"]
-            rows.append({"Id": str(i), "Label": f"{i} · {d['name']} · {host}" + (" (기본)" if i == default else "")})
-    emit("devices", devices=rows)
+    emit("devices", devices=device_options(sd))
 
 
 def main():
@@ -318,6 +313,9 @@ def main():
     if a.devices:
         devices(); return
     cfg = json.loads(Path(a.config).read_text(encoding="utf-8-sig")) if a.config else json.loads(sys.stdin.readline())
+    if not a.wav:
+        import sounddevice as sd
+        input_options = bind_input(sd, cfg.get('Device', ''))
     recognizer = Recognizer(cfg)
     if a.wav:
         import soundfile as sf
@@ -363,12 +361,10 @@ def main():
             except queue.Full: pass
 
     threading.Thread(target=control_reader, daemon=True).start()
-    device = cfg.get("Device", "")
-    device = int(device) if str(device).isdigit() else device or None
     capture = bool(cfg.get("InitialCapture", cfg.get("Activation", "voice") == "voice"))
     next_level, last_warning = 0.0, 0.0
-    with sd.InputStream(samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, device=device, callback=callback):
-        emit("ready", mode="mic", device=str(device), hint_count=recognizer.hint_count, process_id=os.getpid())
+    with sd.InputStream(samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=callback, **input_options):
+        emit("ready", mode="mic", device=str(input_options['device']), hint_count=recognizer.hint_count, process_id=os.getpid())
         while not stopped.is_set():
             while not controls.empty():
                 msg = controls.get_nowait()

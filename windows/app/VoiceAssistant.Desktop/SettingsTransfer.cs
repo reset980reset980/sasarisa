@@ -91,7 +91,7 @@ public static class SettingsTransfer
             next.ProviderProfiles = new(current.ProviderProfiles); next.WhisperUrl = current.WhisperUrl; next.WhisperMode = current.WhisperMode; next.ProjectDirectory = current.ProjectDirectory;
             next.Tts = current.Tts with { };
         }
-        if (!devices) { next.Device = current.Device; next.VoiceId = current.VoiceId; next.OutputId = current.OutputId; next.Desktop.OverlayScreen = current.Desktop.OverlayScreen; next.Desktop.StartupListening = current.Desktop.StartupListening; }
+        if (!devices) { next.Device = current.Device; next.DeviceLabel = current.DeviceLabel; next.VoiceId = current.VoiceId; next.OutputId = current.OutputId; next.Desktop.OverlayScreen = current.Desktop.OverlayScreen; next.Desktop.StartupListening = current.Desktop.StartupListening; }
         Validate(next); return next;
     }
     public static string Describe(UiSettings before, UiSettings after)
@@ -101,6 +101,7 @@ public static class SettingsTransfer
         void Item(string label, object? oldValue, object? newValue) { var oldText = Display(oldValue); var newText = Display(newValue); if (oldText != newText) lines.Add($"{label}\n  {oldText}\n  → {newText}"); }
         Item("호출 이름", before.Name, after.Name); Item("호출 방식", Mode(before.Activation), Mode(after.Activation)); Item("입력 마이크", before.Device, after.Device);
         Item("별도 호출어 (비우면 이름 사용)", string.Join(" / ", before.WakeWords), string.Join(" / ", after.WakeWords));
+        Item("입력 마이크 이름", before.DeviceLabel, after.DeviceLabel);
         string Startup(string mode) => mode switch { "always" => "항상 듣기 시작", "off" => "항상 듣기 중지", _ => "마지막 듣기 상태 복원" };
         Item("앱 실행 시 듣기", Startup(before.Desktop.StartupListening), Startup(after.Desktop.StartupListening));
         foreach (var name in before.LearnedWakes.Keys.Union(after.LearnedWakes.Keys).Order())

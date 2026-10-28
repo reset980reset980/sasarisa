@@ -1,4 +1,4 @@
-﻿param([string]$Version = '0.2.43')
+﻿param([string]$Version = '0.2.44')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be major.minor.build' }
 $root = $PSScriptRoot
@@ -29,6 +29,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Pinned speech package extraction failed.' }
 New-Item -ItemType Directory -Force (Join-Path $stage 'runtime'),(Join-Path $stage 'poc') | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'runtime\speech_worker.py') -Destination (Join-Path $stage 'runtime')
 Copy-Item -LiteralPath (Join-Path $root 'runtime\acoustics.py') -Destination (Join-Path $stage 'runtime')
+Copy-Item -LiteralPath (Join-Path $root 'runtime\input_devices.py') -Destination (Join-Path $stage 'runtime')
 Copy-Item -LiteralPath (Join-Path $root 'runtime\check_runtime.py') -Destination (Join-Path $stage 'runtime')
 Copy-Item -LiteralPath (Join-Path $root 'poc\wake_poc.py') -Destination (Join-Path $stage 'poc')
 Copy-Item -LiteralPath (Join-Path $root '..\LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')

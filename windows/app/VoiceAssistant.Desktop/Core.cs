@@ -51,6 +51,7 @@ public static class SettingsStore
         if (string.IsNullOrWhiteSpace(s.Name) || s.Name.Trim().Length > 20) throw new ArgumentException("호출 이름은 1~20자로 입력하세요.");
         s.LearnedWakes ??= new(); LearnedNames.Validate(s.LearnedWakes);
         WakePhrases.Validate(s.WakeWords);
+        InputDeviceSelection.Validate(s.Device, s.DeviceLabel);
         _ = CodexEffort.Label(s.BrainEffort);
         if (s.Activation is not ("voice" or "hotkey" or "hold")) throw new ArgumentException("호출 방식을 확인하세요.");
         if (s.BargeIn is not ("auto" or "any" or "wake" or "off")) throw new ArgumentException("답변 중 끼어들기 방식을 확인하세요.");
