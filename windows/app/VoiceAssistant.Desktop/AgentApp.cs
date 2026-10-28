@@ -105,34 +105,48 @@ public partial class App
         }
         async Task<bool> Approve(AssistantAction action, CancellationToken cancellation)
             {
-                RemoteExecution.Guard(action, true);
+                RemoteExecution.Guard(action, true, preparing: true);
                 await Guard(action);
-                if (action.Kind == "display_off") return ActionApprovalWindow.Confirm(window, AgentRun.Describe(action), cancellation);
+                bool Consent(string description, ActionEffect effect, VisualPreview? image = null)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    var decision = ExecutionConsent.Decide(requestSettings.FreeMode, action, true, effect, RemoteExecution.Current != null);
+                    if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException(effect == ActionEffect.Payment ? "휴대폰에서는 결제를 실행하지 않아요. PC에서 확인하세요." : "대상을 확인하지 못해 휴대폰에서 실행하지 않았어요. PC에서 확인하세요.");
+                    if (decision == ConsentDecision.Run)
+                    {
+                        RemoteExecution.Current?.GrantPrepared(action, effect);
+                        return true;
+                    }
+                    return ActionApprovalWindow.Confirm(window, description, cancellation, image);
+                }
+                if (action.Kind == "display_off") return Consent(AgentRun.Describe(action), ActionEffect.None);
                 if (action.Kind is "kakao_draft" or "kakao_send" or "kakao_send_draft")
                 {
                     overlay.HideOverlay();
                     var kakaoPreview = await kakaoChats.PrepareAsync(action, cancellation);
                     bound = null; controls = null; visual = null; browserAnchor = null; context = hands.CaptureForegroundContext(); windows.Invalidate();
-                    return ActionApprovalWindow.Confirm(window, kakaoPreview, cancellation);
+                    return Consent(kakaoPreview, ExecutionConsent.Effect(action));
                 }
                 if (action.Kind == "delegate_session")
                 {
                     overlay.HideOverlay();
                     var handoff = await claudeSessions.PrepareAsync(action.Target, action.Value, cancellation);
                     bound = null; controls = null; visual = null; browserAnchor = null; context = hands.CaptureForegroundContext();
-                    return ActionApprovalWindow.Confirm(window, handoff, cancellation);
+                    return Consent(handoff, ActionEffect.Delegate);
                 }
                 var description = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Describe(action) : AgentRun.Describe(action);
+                var effect = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Effect(action) : ExecutionConsent.Effect(action);
                 if (action.Kind == "key")
                 {
                     var chord = KeyboardChord.Parse(action.Value);
                     if (chord.Matches(hotkeys?.Wake) || chord.Matches(hotkeys?.Stop)) throw new AgentStoppedException("비서의 말하기·중지 단축키는 다른 앱으로 보내지 않아요.");
                     confirmedKeyFocus = await hands.CaptureKeyFocusAsync(bound!, cancellation); confirmedKeyAction = action;
+                    effect = ExecutionConsent.Effect(action, confirmedKeyFocus.Name);
                     description += "\n키를 받을 항목: " + (confirmedKeyFocus.Name.Length == 0 ? "현재 초점 항목" : confirmedKeyFocus.Name[..Math.Min(180, confirmedKeyFocus.Name.Length)]);
                 }
                 if (action.Kind == "screenshot") description = "이 창의 현재 이미지를 " + Brain.NameFor(requestSettings.BrainProvider) + "에 전달합니다.";
                 var preview = action.Kind == "click" ? Visual().Preview(action.Value, action.X, action.Y) : null;
-                return ActionApprovalWindow.Confirm(window, $"대상: {hands.TargetLabel}\n\n{description}", cancellation, preview);
+                return Consent($"대상: {hands.TargetLabel}\n\n{description}", effect, preview);
             }
         async Task<ActionOutcome> Execute(AssistantAction action, CancellationToken cancellation)
             {

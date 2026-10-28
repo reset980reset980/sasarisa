@@ -21,6 +21,8 @@ public sealed record DeviceOption(string Id, string Label)
 public sealed record UiSettings
 {
     public string Language { get; set; } = "ko";
+    public bool FreeMode { get; set; }
+    public bool FreeModeAsked { get; set; }
     public string Name { get; set; } = "자비스";
     public Dictionary<string, string[]> LearnedWakes { get; set; } = new();
     public string[] WakeWords { get; set; } = Array.Empty<string>();
@@ -208,6 +210,7 @@ public partial class MainWindow : Window
         ApplyAssistantName(settings.Name);
         NameInput.Text = settings.Name;
         LanguageInput.SelectedValue = settings.Language;
+        FreeModeInput.IsChecked = settings.FreeMode;
         WakeWordsInput.Text = string.Join(Environment.NewLine, settings.WakeWords);
         _selectedDevice = settings.Device;
         _inputDeviceSource = settings.Device;
@@ -422,6 +425,8 @@ public partial class MainWindow : Window
         {
             Name = NameInput.Text.Trim(),
             Language = LanguageInput.SelectedValue as string ?? "ko",
+            FreeMode = FreeModeInput.IsChecked == true,
+            FreeModeAsked = _loadedSettings.FreeModeAsked || (FreeModeInput.IsChecked == true) != _loadedSettings.FreeMode,
             WakeWords = wakeWords,
             LearnedWakes = new(_loadedSettings.LearnedWakes),
             Device = (DeviceInput.SelectedItem as DeviceOption)?.Id ?? _selectedDevice,

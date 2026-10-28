@@ -38,7 +38,7 @@ public partial class App
 {
     async Task<string> RunKakaoAsync(KakaoCommand command, CancellationToken token)
     {
-        RemoteExecution.Guard(new AssistantAction(command.Kind, command.Text), false);
+        RemoteExecution.Guard(new AssistantAction(command.Kind, command.Text), false, preparing: true);
         overlay.HideOverlay(); var chats = new KakaoChats(hands.KakaoChatDriver());
         var page = await chats.ListAsync("", 0, token);
         if (command.Kind == "kakao_chats") return page.Chats.Count == 0 ? "열린 카카오톡 대화방이 없어요. 사용할 대화방을 먼저 열어 주세요." :
@@ -46,7 +46,12 @@ public partial class App
         var room = KakaoCommands.Select(page, command.Recipient);
         var action = new AssistantAction(command.Kind, command.Text, Target: room.Id);
         var description = await chats.PrepareAsync(action, token);
-        if (!ActionApprovalWindow.Confirm(window, description, token)) return "카카오톡 요청을 취소했어요. 초안과 메시지는 변경하지 않았어요.";
+        var effect = ExecutionConsent.Effect(action);
+        var decision = ExecutionConsent.Decide(settings.FreeMode, action, false, effect, RemoteExecution.Current != null);
+        if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("카카오톡 요청은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
+        if (decision == ConsentDecision.Ask && !ActionApprovalWindow.Confirm(window, description, token)) return "카카오톡 요청을 취소했어요. 초안과 메시지는 변경하지 않았어요.";
+        RemoteExecution.Current?.GrantPrepared(action, effect);
+        RemoteExecution.Guard(action, false);
         var result = await chats.ApplyAsync(action, token);
         actionHistory.Record(result.SendRequested ? "카카오톡 전송 요청" : "카카오톡 초안 입력", unavailable: "카카오톡에서 초안과 전송 결과를 직접 확인하세요.");
         return KakaoChats.Summary(result);

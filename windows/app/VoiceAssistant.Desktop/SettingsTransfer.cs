@@ -77,7 +77,7 @@ public static class SettingsTransfer
         try { File.WriteAllText(temp, text, new UTF8Encoding(false)); if (File.Exists(fullPath)) File.Replace(temp, fullPath, fullPath + ".previous"); else File.Move(temp, fullPath); }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
-    public static UiSettings Prepare(UiSettings imported, UiSettings current, bool connections, bool devices)
+    public static UiSettings Prepare(UiSettings imported, UiSettings current, bool connections, bool devices, bool permissions = false)
     {
         var next = Copy(imported); next.Desktop.SetupComplete = current.Desktop.SetupComplete;
         next.Text.WordCandidates = new(current.Text.WordCandidates);
@@ -92,6 +92,7 @@ public static class SettingsTransfer
             next.Tts = current.Tts with { };
         }
         if (!devices) { next.Device = current.Device; next.DeviceLabel = current.DeviceLabel; next.VoiceId = current.VoiceId; next.OutputId = current.OutputId; next.Desktop.OverlayScreen = current.Desktop.OverlayScreen; next.Desktop.StartupListening = current.Desktop.StartupListening; }
+        if (!permissions) { next.FreeMode = current.FreeMode; next.FreeModeAsked = current.FreeModeAsked; }
         Validate(next); return next;
     }
     public static string Describe(UiSettings before, UiSettings after)
@@ -100,6 +101,7 @@ public static class SettingsTransfer
         string Display(object? value) => value switch { bool flag => flag ? "켜짐" : "꺼짐", string[] words => words.Length == 0 ? "비어 있음" : string.Join(" / ", words), string str => str.Length == 0 ? "기본값 / 비어 있음" : str, _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "" };
         void Item(string label, object? oldValue, object? newValue) { var oldText = Display(oldValue); var newText = Display(newValue); if (oldText != newText) lines.Add($"{label}\n  {oldText}\n  → {newText}"); }
         Item("대화 언어", ConversationLanguage.Get(before.Language).Label, ConversationLanguage.Get(after.Language).Label);
+        Item("자유 모드", before.FreeMode, after.FreeMode);
         Item("호출 이름", before.Name, after.Name); Item("호출 방식", Mode(before.Activation), Mode(after.Activation)); Item("입력 마이크", before.Device, after.Device);
         Item("별도 호출어 (비우면 이름 사용)", string.Join(" / ", before.WakeWords), string.Join(" / ", after.WakeWords));
         Item("입력 마이크 이름", before.DeviceLabel, after.DeviceLabel);

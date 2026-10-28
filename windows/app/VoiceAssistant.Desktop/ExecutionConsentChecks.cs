@@ -1,0 +1,155 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+
+namespace VoiceAssistant.Desktop;
+
+internal static class ExecutionConsentChecks
+{
+    sealed class Driver : IDesktopControlDriver
+    {
+        internal DesktopControl Current = new("button", "Button", "전송", "일반 메시지", "invoke", false, "Enabled", "r1");
+        internal int Mutations;
+        public Task<DesktopControlSnapshot> ReadAsync(CancellationToken token) => Task.FromResult(new DesktopControlSnapshot("fixture", "fixture window", new[] { Current }));
+        public Task PressAsync(DesktopControl control, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested(); if (control != Current) throw new AgentStoppedException("Changed target"); Mutations++; return Task.CompletedTask;
+        }
+        public Task FillAsync(DesktopControl control, string text, CancellationToken token) => throw new Exception("Unexpected fill");
+        public Task InsertAsync(DesktopControl control, string text, CancellationToken token) => throw new Exception("Unexpected insert");
+    }
+    internal static async Task<int> RunAsync(List<object> rows)
+    {
+        int failed = 0;
+        void Require(bool value, string reason) { if (!value) throw new Exception(reason); }
+        void Reject(Action action) { try { action(); } catch (AgentStoppedException) { return; } throw new Exception("Missing permission was accepted"); }
+        async Task Check(string name, Func<Task> work) { try { await work(); rows.Add(new { name, pass = true }); } catch (Exception ex) { failed++; rows.Add(new { name, pass = false, error = ex.ToString() }); } }
+        await Check("Execution defaults preserve confirmation and payment always requires PC review", () =>
+        {
+            var old = JsonSerializer.Deserialize<UiSettings>("{}")!; Require(!old.FreeMode && !old.FreeModeAsked, "Existing profile enabled free mode");
+            foreach (var enabled in new[] { false, true }) foreach (var remote in new[] { false, true })
+            {
+                var action = new AssistantAction("press_control", Guid.NewGuid().ToString("N"));
+                Require(ExecutionConsent.Decide(enabled, action, true, ActionEffect.Payment, remote) == (remote ? ConsentDecision.HoldRemote : ConsentDecision.Ask), "Payment bypassed consent");
+                Require(ExecutionConsent.Decide(enabled, action, true, ActionEffect.Unknown, remote) == (remote ? ConsentDecision.HoldRemote : ConsentDecision.Ask), "Unknown target bypassed review");
+                Require(ExecutionConsent.Decide(enabled, action, true, ActionEffect.Send, remote) == (enabled ? ConsentDecision.Run : remote ? ConsentDecision.HoldRemote : ConsentDecision.Ask), "Free mode did not preserve the default boundary");
+            }
+            return Task.CompletedTask;
+        });
+        await Check("Observed payment labels outrank sending and browsing exemptions cannot hide a payment", () =>
+        {
+            foreach (var label in new[] { "결제하기", "주문 확정", "Send money", "Pay now", "Confirm order", "購入する", "付款", "Pagar", "Acheter", "Bezahlen", "Comprar", "Pagare", "Thanh toán", "ชำระเงิน", "Bayar" })
+                Require(ExecutionConsent.LabelEffect(label) == ActionEffect.Payment, "Payment label missed: " + label);
+            Require(ExecutionConsent.LabelEffect("Continue", "Checkout") == ActionEffect.Payment, "Observed payment context was ignored");
+            Require(ExecutionConsent.LabelEffect("Payment history") == ActionEffect.None && ExecutionConsent.LabelEffect("결제내역 조회 후 결제") == ActionEffect.Payment, "Browsing exemption hid an execution");
+            Require(ExecutionConsent.LabelEffect("Continue") == ActionEffect.Unknown, "Unclassified Continue auto-approved");
+            Require(ExecutionConsent.Effect(new("type", "pay now")) == ActionEffect.None, "Model text became a target label");
+            return Task.CompletedTask;
+        });
+        await Check("Settings exchanges require explicit permission opt-in independently of connections and devices", () =>
+        {
+            var current = new UiSettings(); var imported = SettingsTransfer.Parse(SettingsTransfer.Serialize(current with { FreeMode = true, FreeModeAsked = true }));
+            Require(!SettingsTransfer.Prepare(imported, current, true, true).FreeMode, "Connection or device opt-in enabled execution rights");
+            var enabled = SettingsTransfer.Prepare(imported, current, false, false, permissions: true);
+            Require(enabled.FreeMode && enabled.FreeModeAsked && SettingsTransfer.Describe(current, enabled).Contains("자유 모드"), "Permission selection or review lost");
+            Require(SettingsTransfer.Prepare(current, enabled, false, false).FreeMode, "Unselected import disabled the current choice");
+            var mac = MacSettingsTransfer.Parse("{\"freeMode\":true,\"freeModeAsked\":true}", current);
+            Require(mac.Settings.FreeMode && mac.Settings.FreeModeAsked && mac.Notices.Any(x => x.Contains("선택한 경우")), "Mac rights did not convert with a notice");
+            Require(!SettingsTransfer.Prepare(mac.Settings, current, false, false).FreeMode, "Mac import silently raised permissions");
+            return Task.CompletedTask;
+        });
+        await Check("Actual hidden settings and import review apply free mode only after explicit Save and opt-in", () =>
+        {
+            var current = new UiSettings { Speak = false }; var view = new MainWindow(); view.LoadSettings(current);
+            try
+            {
+                view.SettingsSaved += next => { current = next; view.LoadSettings(next); return null; };
+                var checkbox = (CheckBox)view.FindName("FreeModeInput"); checkbox.IsChecked = true;
+                Require(!current.FreeMode, "Draft changed execution rights"); view.SaveSettingsForCheck();
+                Require(current.FreeMode && current.FreeModeAsked, "Actual Save did not capture explicit choice");
+                checkbox.IsChecked = false; view.SaveSettingsForCheck(); Require(!current.FreeMode && current.FreeModeAsked, "Turning off reset one-time choice");
+                var review = new SettingsImportWindow(current with { FreeMode = true }, current);
+                try
+                {
+                    review.SelectConnections(true); review.SelectDevices(true); Require(!review.AcceptSelection().FreeMode, "Unrelated import checkbox granted rights");
+                    review.SelectPermissions(true); Require(review.AcceptSelection().FreeMode && review.ChangeDescription.Contains("자유 모드"), "Permission import did not appear in review");
+                    Require(!review.IsVisible && PresentationSource.FromVisual(review) == null, "Import window was presented");
+                }
+                finally { review.Close(); }
+                Require(!view.IsVisible && PresentationSource.FromVisual(view) == null, "Settings window was presented");
+                var section = (FrameworkElement)view.FindName("ExecutionConsentSection"); section.Measure(new Size(650, 300)); section.Arrange(new Rect(0, 0, 650, section.DesiredSize.Height)); section.UpdateLayout();
+                var bounds = new Rect(0, 0, 650, section.ActualHeight); var drawing = new DrawingVisual();
+                using (var context = drawing.RenderOpen()) { context.DrawRectangle(Brushes.White, null, bounds); context.DrawRectangle(new VisualBrush(section), null, bounds); }
+                var bitmap = new RenderTargetBitmap(650, Math.Max(1, (int)Math.Ceiling(bounds.Height)), 96, 96, PixelFormats.Pbgra32); bitmap.Render(drawing);
+                var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+                var folder = Path.Combine(AppPaths.WindowsRoot, "artifacts", "execution-consent-0246"); Directory.CreateDirectory(folder);
+                using var file = File.Create(Path.Combine(folder, "consent-settings.png")); png.Save(file);
+            }
+            finally { view.Close(); }
+            return Task.CompletedTask;
+        });
+        await Check("Remote mode is captured per request and requires prepared nonpayment permission for each action", async () =>
+        {
+            var send = new AssistantAction("kakao_send", "Fixture message", Target: Guid.NewGuid().ToString("N"));
+            await new RemoteExecution(CancellationToken.None).RunAsync(() => { Reject(() => RemoteExecution.Guard(send, true, preparing: true)); return Task.CompletedTask; });
+            var scope = new RemoteExecution(CancellationToken.None, freeMode: true);
+            await scope.RunAsync(() =>
+            {
+                RemoteExecution.Guard(send, true, preparing: true); Reject(() => RemoteExecution.Guard(send, true));
+                Reject(() => scope.GrantPrepared(send, ActionEffect.Payment)); Reject(() => scope.GrantPrepared(send, ActionEffect.Unknown));
+                scope.GrantPrepared(send, ActionEffect.Send); RemoteExecution.Guard(send, true);
+                Reject(() => RemoteExecution.Guard(send with { Value = "Changed message" }, true));
+                RemoteExecution.Guard(send, true, preparing: true); Reject(() => RemoteExecution.Guard(send, true));
+                return Task.CompletedTask;
+            });
+            Require(RemoteExecution.Current == null, "Remote permission scope leaked");
+        });
+        await Check("Free-mode controller permission cannot bypass a changed observed target", async () =>
+        {
+            var driver = new Driver(); var controls = new DesktopControls(driver);
+            var page = await controls.ListAsync("", 0, CancellationToken.None); var action = new AssistantAction("press_control", page.Controls.Single().Id);
+            Require(controls.Effect(action) == ActionEffect.Send && ExecutionConsent.Decide(true, action, true, controls.Effect(action), false) == ConsentDecision.Run, "Known send not eligible");
+            driver.Current = driver.Current with { Name = "결제", Revision = "r2" };
+            try { await controls.PressAsync(action.Value, CancellationToken.None); throw new Exception("Changed payment target pressed"); } catch (AgentStoppedException) { }
+            Require(driver.Mutations == 0, "Permission bypassed the native driver contract");
+        });
+        await Check("Actual MCP runner declines payments while prepared nonpayment actions retain lifecycle checks", async () =>
+        {
+            var driver = new Driver(); var controls = new DesktopControls(driver); var page = await controls.ListAsync("", 0, CancellationToken.None);
+            var action = new AssistantAction("press_control", page.Controls.Single().Id); var scope = new RemoteExecution(CancellationToken.None, freeMode: true);
+            await scope.RunAsync(async () =>
+            {
+                var runner = new McpAgentRun((candidate, token) =>
+                {
+                    RemoteExecution.Guard(candidate, true, preparing: true); var effect = controls.Effect(candidate);
+                    Require(ExecutionConsent.Decide(true, candidate, true, effect, true) == ConsentDecision.Run, "Prepared action held"); scope.GrantPrepared(candidate, effect); return Task.FromResult(true);
+                }, async (candidate, token) => { RemoteExecution.Guard(candidate, true); await controls.PressAsync(candidate.Value, token); return new ActionOutcome("Fixture applied"); }, null, null);
+                Require((await runner.DispatchAsync(action, CancellationToken.None)).Status == "succeeded" && driver.Mutations == 1, "Prepared MCP action failed");
+            });
+            driver.Current = driver.Current with { Name = "Pay now", Revision = "r3" }; page = await controls.ListAsync("", 0, CancellationToken.None); action = new("press_control", page.Controls.Single().Id);
+            var payment = new McpAgentRun((candidate, token) => Task.FromResult(ExecutionConsent.Decide(true, candidate, true, controls.Effect(candidate), false) == ConsentDecision.Run),
+                (_, _) => throw new Exception("Payment executor reached"), null, null);
+            Require((await payment.DispatchAsync(action, CancellationToken.None)).Status == "declined", "Payment consent skipped");
+        });
+        await Check("One-time free-mode offers require a local eligible action and an exact timely answer", () =>
+        {
+            var now = DateTimeOffset.UtcNow; var offer = new FreeModeOffer(() => now); var settings = new UiSettings();
+            Require(!offer.Begin(settings, ActionEffect.Payment, false) && !offer.Begin(settings, ActionEffect.Send, true), "Ineligible action offered rights");
+            Require(offer.Begin(settings, ActionEffect.Send, false) && offer.Answer("yes, delete it", false) == FreeModeAnswer.None, "A new command enabled rights");
+            Require(offer.Begin(settings, ActionEffect.Delete, false) && offer.Answer("응", true) == FreeModeAnswer.None, "Remote answer enabled local rights");
+            offer.Begin(settings, ActionEffect.Send, false); now = now.AddSeconds(21); Require(offer.Answer("yes", false) == FreeModeAnswer.None, "Expired answer enabled rights");
+            Require(!offer.Begin(settings with { FreeModeAsked = true }, ActionEffect.Send, false), "Offer repeated after owner choice");
+            offer.Begin(settings, ActionEffect.Send, false); Require(offer.Answer("네!", false) == FreeModeAnswer.Yes && !offer.Pending, "Explicit local yes was lost");
+            return Task.CompletedTask;
+        });
+        return failed;
+    }
+}

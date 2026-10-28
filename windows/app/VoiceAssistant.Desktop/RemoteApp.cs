@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace VoiceAssistant.Desktop;
 
-internal sealed class RemoteExecution(CancellationToken token, string? conversation = null)
+internal sealed class RemoteExecution(CancellationToken token, string? conversation = null, bool freeMode = false)
 {
     static readonly AsyncLocal<RemoteExecution?> scope = new();
     readonly List<string> replies = new();
@@ -15,6 +15,14 @@ internal sealed class RemoteExecution(CancellationToken token, string? conversat
     string voiceNotice = "";
     public static RemoteExecution? Current => scope.Value;
     public CancellationToken Token { get; } = token;
+    public bool FreeMode { get; } = freeMode;
+    readonly HashSet<AssistantAction> prepared = new();
+    public void GrantPrepared(AssistantAction action, ActionEffect effect)
+    {
+        Token.ThrowIfCancellationRequested();
+        if (!FreeMode || effect is ActionEffect.Payment or ActionEffect.Unknown) throw new AgentStoppedException("이 동작은 휴대폰에서 실행하지 않았어요. PC에서 내용을 확인하세요.");
+        prepared.Add(action);
+    }
     public string ConversationScope { get; } = "remote:" + (conversation ?? Guid.NewGuid().ToString("N"));
     public void VoiceNotice(string text) => voiceNotice = RemoteText.Clip(text, 140);
     public void ExecutionNotice(string text)
@@ -37,12 +45,18 @@ internal sealed class RemoteExecution(CancellationToken token, string? conversat
             return RemoteText.Clip((notice.Length > 0 ? notice + "\n" : "") + (voiceNotice.Length > 0 ? voiceNotice + "\n" : "") + answer, 400);
         }
     }
-    public static void Guard(AssistantAction action, bool fromAi)
+    public static void Guard(AssistantAction action, bool fromAi, bool preparing = false)
     {
         if (Current == null) return;
         Current.Token.ThrowIfCancellationRequested();
-        if (ActionPolicy.NeedsConfirmation(action, fromAi) || action.Kind is "rewrite" or "dictation")
+        if (action.Kind is "rewrite" or "dictation")
             throw new AgentStoppedException("이 동작은 PC에서 내용을 확인해야 해요. 휴대폰에서는 실행하지 않았습니다. PC에서 다시 요청해 주세요.");
+        if (ActionPolicy.NeedsConfirmation(action, fromAi))
+        {
+            if (Current.FreeMode && preparing) { Current.prepared.Clear(); return; }
+            if (Current.FreeMode && Current.prepared.Contains(action)) return;
+            throw new AgentStoppedException("이 동작은 PC에서 내용을 확인해야 해요. 휴대폰에서는 실행하지 않았습니다. PC에서 다시 요청해 주세요.");
+        }
     }
 }
 
@@ -93,7 +107,7 @@ public partial class App
             return "PC에서 다른 작업을 처리 중이에요. 끝난 뒤 다시 요청해 주세요.";
         var text = LearnedNames.Strip(command.Text, settings);
         if (string.IsNullOrWhiteSpace(text)) return "호출 이름 뒤에 실행할 내용을 함께 보내 주세요.";
-        var context = new RemoteExecution(token, (localPhone ? "phone:" : "pro:") + command.Account + ":" + (command.ConversationId ?? command.Id));
+        var context = new RemoteExecution(token, (localPhone ? "phone:" : "pro:") + command.Account + ":" + (command.ConversationId ?? command.Id), settings.FreeMode);
         if (!localPhone) window.SetRemoteStatus("휴대폰 요청을 처리 중이에요.");
         return await context.RunAsync(() => SubmitAsync(text, false));
     }

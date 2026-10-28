@@ -393,8 +393,13 @@ public partial class App : System.Windows.Application
                 if (run.LearningPlan is { } learned) { personal.Learn(text, learned); RecordSharedLearning(text, learned); }
                 parsed = new(run.Reply, Array.Empty<AssistantAction>());
             }
-            token.ThrowIfCancellationRequested(); foreach (var action in parsed.Actions) { ActionPolicy.Validate(action); RemoteExecution.Guard(action, false); }
+            token.ThrowIfCancellationRequested(); foreach (var action in parsed.Actions) { ActionPolicy.Validate(action); RemoteExecution.Guard(action, false, preparing: true); }
             var confirmations = parsed.Actions.Where(x => ActionPolicy.NeedsConfirmation(x, false)).ToArray();
+            if (settings.FreeMode && confirmations.All(a => ExecutionConsent.Decide(true, a, false, ExecutionConsent.Effect(a), RemoteExecution.Current != null) == ConsentDecision.Run))
+            {
+                foreach (var action in confirmations) RemoteExecution.Current?.GrantPrepared(action, ExecutionConsent.Effect(action));
+                confirmations = Array.Empty<AssistantAction>();
+            }
             WindowsActions.InputTarget? localKeyTarget = null;
             WindowsActions.KeyFocus? localKeyFocus = null;
             if (confirmations.Length > 0)
@@ -405,9 +410,17 @@ public partial class App : System.Windows.Application
                 if (parsed.Actions.Count == 1 && parsed.Actions[0].Kind == "key")
                 {
                     hands.TrackForeground(); localKeyTarget = hands.CaptureInputTarget(); localKeyFocus = await hands.CaptureKeyFocusAsync(localKeyTarget, token);
-                    approved = ActionApprovalWindow.Confirm(window, $"대상: {target}\n\n{AgentRun.Describe(parsed.Actions[0])}\n키를 받을 항목: {localKeyFocus.Name}", token);
+                    var effect = ExecutionConsent.Effect(parsed.Actions[0], localKeyFocus.Name);
+                    var decision = ExecutionConsent.Decide(settings.FreeMode, parsed.Actions[0], false, effect, RemoteExecution.Current != null);
+                    if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("이 키 입력은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
+                    approved = decision == ConsentDecision.Run || ActionApprovalWindow.Confirm(window, $"대상: {target}\n\n{AgentRun.Describe(parsed.Actions[0])}\n키를 받을 항목: {localKeyFocus.Name}", token);
+                    if (approved) RemoteExecution.Current?.GrantPrepared(parsed.Actions[0], effect);
                 }
-                else approved = MessageBox.Show(window, $"대상: {target}\n\n{details}\n\n실행할까요?", "실행 내용 확인", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+                else
+                {
+                    if (RemoteExecution.Current != null) throw new AgentStoppedException("이 동작은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
+                    approved = MessageBox.Show(window, $"대상: {target}\n\n{details}\n\n실행할까요?", "실행 내용 확인", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+                }
                 if (!approved) { window.AddMessage("assistant", "실행을 취소했어요."); return; }
             }
             foreach (var action in parsed.Actions) { token.ThrowIfCancellationRequested(); var result=await ExecuteAsync(action, token, localKeyTarget, localKeyFocus); if(result!=null&&parsed.Actions.Count==1)parsed=parsed with{Reply=result};AppPaths.Log("action", JsonSerializer.Serialize(action)); }

@@ -41,7 +41,7 @@ public partial class MainWindow
 
 public sealed class SettingsImportWindow : Window
 {
-    readonly CheckBox connections, devices;
+    readonly CheckBox connections, devices, permissions;
     readonly TextBox changes;
     readonly UiSettings imported, current;
     readonly bool allowDevices;
@@ -50,7 +50,8 @@ public sealed class SettingsImportWindow : Window
     internal bool AllowsDeviceImport => allowDevices && devices.IsEnabled;
     internal void SelectConnections(bool enabled) => connections.IsChecked = enabled;
     internal void SelectDevices(bool enabled) => devices.IsChecked = enabled;
-    UiSettings Selection() => SettingsTransfer.Prepare(imported, current, connections.IsChecked == true, allowDevices && devices.IsChecked == true);
+    internal void SelectPermissions(bool enabled) => permissions.IsChecked = enabled;
+    UiSettings Selection() => SettingsTransfer.Prepare(imported, current, connections.IsChecked == true, allowDevices && devices.IsChecked == true, permissions.IsChecked == true);
     internal UiSettings AcceptSelection() { Result = Selection(); return Result; }
     public SettingsImportWindow(UiSettings imported, UiSettings current, string[]? notices = null, bool allowDevices = true)
     {
@@ -63,12 +64,14 @@ public sealed class SettingsImportWindow : Window
         header.Children.Add(new TextBlock { Text = "적용하면 저장된 설정과 화면에서 편집 중인 값을 바꿉니다.\nAPI 키·로그인·기억·루틴·등록 앱은 현재 상태를 유지합니다.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,12,0,14), Foreground = Brushes.SlateGray });
         connections = new CheckBox { Content = allowDevices ? "AI 연결·Whisper 주소·코딩 폴더도 가져오기" : "AI·외부 목소리 연결도 가져오기", Margin = new Thickness(0,0,0,10) };
         devices = new CheckBox { Content = "마이크·시작 시 듣기·목소리·출력 장치·알림 화면도 가져오기", Margin = new Thickness(0,0,0,15), IsEnabled = allowDevices, Visibility = allowDevices ? Visibility.Visible : Visibility.Collapsed }; header.Children.Add(connections); header.Children.Add(devices);
+        permissions = new CheckBox { Content = "자유 모드·자유 모드 제안 상태도 가져오기", Margin = new Thickness(0,0,0,15) }; header.Children.Add(permissions);
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,16,0,0) }; DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         var cancel = new Button { Content = "취소", IsCancel = true, Padding = new Thickness(20,9,20,9), Margin = new Thickness(0,0,10,0), Style = (Style)Application.Current.FindResource("SecondaryButton") };
         var apply = new Button { Content = "확인한 설정 적용", Padding = new Thickness(20,9,20,9), Style = (Style)Application.Current.FindResource("ActionButton") }; footer.Children.Add(cancel); footer.Children.Add(apply);
         changes = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(15), BorderBrush = Brushes.LightGray }; System.Windows.Automation.AutomationProperties.SetName(changes, "가져올 설정 변경 내용"); root.Children.Add(changes);
         void Refresh() { var next = Selection(); changes.Text = (notices is { Length: > 0 } ? "macOS 설정 변환 안내\n" + string.Join("\n", notices) + "\n\n바뀌는 설정\n" : "") + SettingsTransfer.Describe(this.current, next); }
         connections.Checked += (_,_) => Refresh(); connections.Unchecked += (_,_) => Refresh(); devices.Checked += (_,_) => Refresh(); devices.Unchecked += (_,_) => Refresh();
+        permissions.Checked += (_,_) => Refresh(); permissions.Unchecked += (_,_) => Refresh();
         apply.Click += (_,_) => { AcceptSelection(); DialogResult = true; }; Refresh();
     }
 }

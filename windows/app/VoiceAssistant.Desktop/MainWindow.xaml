@@ -189,6 +189,10 @@
                                 <Button Content="선택한 브라우저에서 유튜브 로그인 확인" Style="{StaticResource SecondaryButton}" Padding="12,7" HorizontalAlignment="Left" Margin="0,8,0,8" Click="YouTubeLogin_Click" />
                                 <TextBlock x:Name="YouTubeFeedback" Style="{StaticResource HelpText}" Margin="0,0,0,20" Text="자비스가 새로 연 영상 창에서만 재생·정지를 제어합니다. 시간 이동은 브라우저에서 직접 해 주세요. 로그인 화면이나 다른 탭으로 바뀌면 조작을 멈춥니다." />
                                 <TextBlock Text="생각하고 답하기" FontSize="17" FontWeight="SemiBold" /><TextBlock Text="앱 실행과 타이머는 바로 처리하고, 질문은 선택한 AI에 연결합니다." Style="{StaticResource HelpText}" Margin="0,6,0,19" />
+                                <StackPanel x:Name="ExecutionConsentSection" Margin="0,0,0,18">
+                                    <CheckBox x:Name="FreeModeInput" Content="자유 모드" AutomationProperties.Name="자유 모드" />
+                                    <TextBlock Text="대상을 확인한 전송·게시·삭제·위임을 추가 확인 없이 실행합니다. 결제와 대상이 불명확한 동작은 계속 확인하며, 휴대폰에서는 결제하지 않습니다. 변경은 설정 저장 후 적용됩니다." Style="{StaticResource HelpText}" TextWrapping="Wrap" />
+                                </StackPanel>
                                 <TextBlock Text="AI 제공자" Style="{StaticResource FieldLabel}" />
                                 <ComboBox x:Name="ProviderInput" SelectedIndex="0" SelectionChanged="ProviderInput_SelectionChanged" AutomationProperties.Name="AI 제공자">
                                     <ComboBoxItem Content="Claude Code · 이 PC의 로그인 사용" Tag="claude" /><ComboBoxItem Content="Codex · 이 PC의 로그인 사용" Tag="codex" /><ComboBoxItem Content="Aside · 브라우저 작업" Tag="aside" /><ComboBoxItem Content="조합 · Codex·Claude·Aside 자동 선택" Tag="combo" /><ComboBoxItem Content="Ollama · 로컬 모델" Tag="ollama" />

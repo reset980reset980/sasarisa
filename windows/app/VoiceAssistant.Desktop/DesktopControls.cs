@@ -73,6 +73,11 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
         if (action.Kind == "insert_field") return label + (control.SelectionLength == 0 ? "\n\n현재 커서 위치에 다음 글을 넣습니다:\n" : "\n\n현재 선택된 부분만 다음 글로 바꿉니다. 나머지 글은 보존합니다:\n") + action.Value;
         return action.Kind == "fill_field" ? label + "\n\n입력칸 전체를 다음 내용으로 바꿉니다:\n" + action.Value : label + "\n동작: " + operation;
     }
+    public ActionEffect Effect(AssistantAction action)
+    {
+        var control = Find(action.Kind is "fill_field" or "insert_field" ? action.Target : action.Value);
+        return ExecutionConsent.Effect(action, control.Name, control.Context);
+    }
     public async Task PressAsync(string id, CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); var control = Find(id);
