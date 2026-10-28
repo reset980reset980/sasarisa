@@ -50,6 +50,8 @@ public partial class App
         var kakaoChats = new KakaoChats(hands.KakaoChatDriver());
         WindowsActions.KeyFocus? confirmedKeyFocus = null;
         AssistantAction? confirmedKeyAction = null;
+        PreparedButton? preparedButton = null;
+        (AssistantAction Action, ActionEffect Effect)? approvedEffect = null;
         DesktopControls? controls = null;
         VisualControls? visual = null;
         WindowsActions.InputTarget? visualTarget = null;
@@ -107,6 +109,8 @@ public partial class App
             {
                 RemoteExecution.Guard(action, true, preparing: true);
                 await Guard(action);
+                preparedButton = null;
+                approvedEffect = null;
                 bool Consent(string description, ActionEffect effect, VisualPreview? image = null)
                 {
                     cancellation.ThrowIfCancellationRequested();
@@ -117,7 +121,9 @@ public partial class App
                         RemoteExecution.Current?.GrantPrepared(action, effect);
                         return true;
                     }
-                    return ActionApprovalWindow.Confirm(window, description, cancellation, image);
+                    var accepted = ActionApprovalWindow.Confirm(window, description, cancellation, image);
+                    if (accepted) approvedEffect = (action, effect);
+                    return accepted;
                 }
                 if (action.Kind == "display_off") return Consent(AgentRun.Describe(action), ActionEffect.None);
                 if (action.Kind is "kakao_draft" or "kakao_send" or "kakao_send_draft")
@@ -136,19 +142,36 @@ public partial class App
                 }
                 var description = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Describe(action) : AgentRun.Describe(action);
                 var effect = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Effect(action) : ExecutionConsent.Effect(action);
+                if (action.Kind == "tap" && requestSettings.FreeMode)
+                {
+                    preparedButton = await Controls().PrepareButtonAsync(action, cancellation);
+                    effect = preparedButton.Effect; description = preparedButton.Controls.Describe(new("press_control", preparedButton.Id));
+                }
                 if (action.Kind == "key")
                 {
                     var chord = KeyboardChord.Parse(action.Value);
                     if (chord.Matches(hotkeys?.Wake) || chord.Matches(hotkeys?.Stop)) throw new AgentStoppedException("비서의 말하기·중지 단축키는 다른 앱으로 보내지 않아요.");
                     confirmedKeyFocus = await hands.CaptureKeyFocusAsync(bound!, cancellation); confirmedKeyAction = action;
-                    effect = ExecutionConsent.Effect(action, confirmedKeyFocus.Name);
+                    effect = ExecutionConsent.Effect(action, confirmedKeyFocus.Name, confirmedKeyFocus.Context);
                     description += "\n키를 받을 항목: " + (confirmedKeyFocus.Name.Length == 0 ? "현재 초점 항목" : confirmedKeyFocus.Name[..Math.Min(180, confirmedKeyFocus.Name.Length)]);
                 }
                 if (action.Kind == "screenshot") description = "이 창의 현재 이미지를 " + Brain.NameFor(requestSettings.BrainProvider) + "에 전달합니다.";
-                var preview = action.Kind == "click" ? Visual().Preview(action.Value, action.X, action.Y) : null;
+                VisualPreview? preview = null;
+                if (action.Kind == "click")
+                {
+                    var reviewed = await Visual().PrepareClickAsync(action.Value, action.X, action.Y, cancellation);
+                    preview = reviewed.Preview; effect = reviewed.Effect;
+                }
                 return Consent($"대상: {hands.TargetLabel}\n\n{description}", effect, preview);
             }
         async Task<ActionOutcome> Execute(AssistantAction action, CancellationToken cancellation)
+        {
+            var approved = approvedEffect; approvedEffect = null;
+            var result = await ExecuteCore(action, cancellation);
+            if (approved is { } consent && consent.Action == action) ConfirmedExecutionSucceeded(consent.Effect, token);
+            return result;
+        }
+        async Task<ActionOutcome> ExecuteCore(AssistantAction action, CancellationToken cancellation)
             {
                 RemoteExecution.Guard(action, true);
                 cancellation.ThrowIfCancellationRequested();
@@ -253,7 +276,7 @@ public partial class App
                         return new($"유튜브 영상 {videos.Count}개를 찾았어요.", JsonSerializer.Serialize(videos.Select((x, i) => new { number = i + 1, title = x.Title, url = x.WatchUrl })));
                 }
                 var previousOwned = ownedWindows.LastOrDefault();
-                var result = await ExecuteAsync(action, cancellation, bound);
+                var result = await ExecuteAsync(action, cancellation, bound, button: preparedButton);
                 cancellation.ThrowIfCancellationRequested();
                 if (action.Kind is "open_app" or "open_url" or "type" or "key" or "tap" or "browser") { controls = null; controlsTarget = null; }
                 if (action.Kind == "open_app")

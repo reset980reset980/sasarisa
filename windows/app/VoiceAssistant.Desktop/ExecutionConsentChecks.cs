@@ -18,7 +18,9 @@ internal static class ExecutionConsentChecks
     {
         internal DesktopControl Current = new("button", "Button", "전송", "일반 메시지", "invoke", false, "Enabled", "r1");
         internal int Mutations;
-        public Task<DesktopControlSnapshot> ReadAsync(CancellationToken token) => Task.FromResult(new DesktopControlSnapshot("fixture", "fixture window", new[] { Current }));
+        internal int Copies = 1;
+        internal bool Truncated;
+        public Task<DesktopControlSnapshot> ReadAsync(CancellationToken token) => Task.FromResult(new DesktopControlSnapshot("fixture", "fixture window", Enumerable.Repeat(Current, Copies).ToArray(), Truncated));
         public Task PressAsync(DesktopControl control, CancellationToken token)
         {
             token.ThrowIfCancellationRequested(); if (control != Current) throw new AgentStoppedException("Changed target"); Mutations++; return Task.CompletedTask;
@@ -26,11 +28,21 @@ internal static class ExecutionConsentChecks
         public Task FillAsync(DesktopControl control, string text, CancellationToken token) => throw new Exception("Unexpected fill");
         public Task InsertAsync(DesktopControl control, string text, CancellationToken token) => throw new Exception("Unexpected insert");
     }
+    sealed class ImageDriver : IVisualDriver
+    {
+        internal readonly VisualFrame Frame = VisualChecks.Fixture();
+        internal VisualTarget? Target = new("button", "Send", "Message", "Button", "Enabled", "r1");
+        internal int Clicks;
+        public Task<VisualFrame> CaptureAsync(CancellationToken token) { token.ThrowIfCancellationRequested(); return Task.FromResult(Frame); }
+        public Task<VisualTarget?> TargetAsync(VisualFrame frame, int x, int y, CancellationToken token) { token.ThrowIfCancellationRequested(); return Task.FromResult(Target); }
+        public Task ClickAsync(VisualFrame frame, int x, int y, CancellationToken token) { token.ThrowIfCancellationRequested(); Clicks++; return Task.CompletedTask; }
+    }
     internal static async Task<int> RunAsync(List<object> rows)
     {
         int failed = 0;
         void Require(bool value, string reason) { if (!value) throw new Exception(reason); }
         void Reject(Action action) { try { action(); } catch (AgentStoppedException) { return; } throw new Exception("Missing permission was accepted"); }
+        async Task RejectAsync(Func<Task> action) { try { await action(); } catch (AgentStoppedException) { return; } throw new Exception("Changed or ambiguous target accepted"); }
         async Task Check(string name, Func<Task> work) { try { await work(); rows.Add(new { name, pass = true }); } catch (Exception ex) { failed++; rows.Add(new { name, pass = false, error = ex.ToString() }); } }
         await Check("Execution defaults preserve confirmation and payment always requires PC review", () =>
         {
@@ -138,6 +150,52 @@ internal static class ExecutionConsentChecks
             var payment = new McpAgentRun((candidate, token) => Task.FromResult(ExecutionConsent.Decide(true, candidate, true, controls.Effect(candidate), false) == ConsentDecision.Run),
                 (_, _) => throw new Exception("Payment executor reached"), null, null);
             Require((await payment.DispatchAsync(action, CancellationToken.None)).Status == "declined", "Payment consent skipped");
+        });
+        await Check("Named buttons bind one unique complete observation and can only be invoked once", async () =>
+        {
+            var driver = new Driver(); var now = DateTimeOffset.UtcNow; var controls = new DesktopControls(driver, () => now); var action = new AssistantAction("tap", "전송");
+            var button = await controls.PrepareButtonAsync(action, default); Require(button.Effect == ActionEffect.Send, "Observed send label lost");
+            await RejectAsync(() => button.ApplyAsync(action with { Value = "삭제" }, default));
+            await button.ApplyAsync(action, default); await RejectAsync(() => button.ApplyAsync(action, default));
+            button = await controls.PrepareButtonAsync(action, default); now += TimeSpan.FromMinutes(3); await RejectAsync(() => button.ApplyAsync(action, default));
+            Require(driver.Mutations == 1, "Unbound, duplicate or expired request mutated the target");
+        });
+        await Check("Duplicate truncated and changed named targets never inherit free-mode approval", async () =>
+        {
+            var driver = new Driver { Copies = 2 }; var controls = new DesktopControls(driver); var action = new AssistantAction("tap", "전송");
+            await RejectAsync(() => controls.PrepareButtonAsync(action, default)); driver.Copies = 1; driver.Truncated = true;
+            await RejectAsync(() => controls.PrepareButtonAsync(action, default)); driver.Truncated = false;
+            foreach (var change in new Func<DesktopControl, DesktopControl>[] { c => c with { Name = "결제" }, c => c with { Context = "Checkout" }, c => c with { State = "Disabled" }, c => c with { Revision = "r2" } })
+            {
+                driver.Current = new("button", "Button", "전송", "일반 메시지", "invoke", false, "Enabled", "r1");
+                var button = await controls.PrepareButtonAsync(action, default); driver.Current = change(driver.Current);
+                await RejectAsync(() => button.ApplyAsync(action, default));
+            }
+            driver.Current = driver.Current with { Name = "전송", Context = "Checkout" };
+            Require((await controls.PrepareButtonAsync(action, default)).Effect == ActionEffect.Payment, "Named payment context bypassed review");
+            Require(driver.Mutations == 0, "An ambiguous or changed button was invoked");
+        });
+        await Check("Image clicks classify the observed target and recheck identity context state and revision despite identical pixels", async () =>
+        {
+            var driver = new ImageDriver(); var visual = new VisualControls(driver); var original = driver.Target!;
+            foreach (var change in new Func<VisualTarget, VisualTarget>[] { t => t with { Identity = "other" }, t => t with { Name = "Pay" }, t => t with { Context = "Checkout" }, t => t with { State = "Disabled" }, t => t with { Revision = "r2" } })
+            {
+                driver.Target = original; var image = await visual.CaptureAsync(default); var review = await visual.PrepareClickAsync(image.Id, 480, 175, default);
+                Require(review.Effect == ActionEffect.Send, "Observed image target not classified"); driver.Target = change(original);
+                await RejectAsync(() => visual.ClickAsync(image.Id, 480, 175, default));
+            }
+            Require(driver.Clicks == 0, "Identical pixels hid a changed action target");
+        });
+        await Check("Image permission binds exact coordinates while inaccessible targets retain local manual review", async () =>
+        {
+            var driver = new ImageDriver(); var visual = new VisualControls(driver); var image = await visual.CaptureAsync(default);
+            await visual.PrepareClickAsync(image.Id, 480, 175, default); await RejectAsync(() => visual.ClickAsync(image.Id, 481, 175, default));
+            driver.Target = null; image = await visual.CaptureAsync(default); var review = await visual.PrepareClickAsync(image.Id, 480, 175, default);
+            var action = new AssistantAction("click", image.Id, X: 480, Y: 175);
+            Require(review.Effect == ActionEffect.Unknown && ExecutionConsent.Decide(true, action, true, review.Effect, false) == ConsentDecision.Ask && ExecutionConsent.Decide(true, action, true, review.Effect, true) == ConsentDecision.HoldRemote, "Unknown image auto-approved");
+            await visual.ClickAsync(image.Id, 480, 175, default); Require(driver.Clicks == 1, "Reviewed inaccessible image path was removed");
+            driver.Target = new("button", "Continue", "Checkout", "Button", "Enabled", "r1"); image = await visual.CaptureAsync(default);
+            Require((await visual.PrepareClickAsync(image.Id, 480, 175, default)).Effect == ActionEffect.Payment, "Payment image context lost");
         });
         await Check("One-time free-mode offers require a local eligible action and an exact timely answer", () =>
         {

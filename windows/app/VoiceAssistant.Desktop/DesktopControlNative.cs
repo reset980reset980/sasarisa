@@ -68,7 +68,7 @@ public sealed partial class WindowsActions
             }
             throw new AgentStoppedException("화면 항목이 원래 창에 속하지 않아 멈췄어요.");
         }
-        DesktopControl? Describe(AutomationElement element)
+        internal DesktopControl? Describe(AutomationElement element)
         {
             var current = element.Current;
             if (current.ProcessId != expected.ProcessId || current.IsPassword || current.IsOffscreen || !current.IsEnabled) return null;

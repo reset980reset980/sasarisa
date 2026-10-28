@@ -65,9 +65,12 @@ internal sealed class FreeModeOffer(Func<DateTimeOffset>? clock = null)
     readonly Func<DateTimeOffset> now = clock ?? (() => DateTimeOffset.UtcNow);
     DateTimeOffset expires;
     public bool Pending => now() < expires;
+    public static bool Eligible(UiSettings settings, ActionEffect confirmedEffect, bool remote) =>
+        !remote && !settings.FreeMode && !settings.FreeModeAsked && confirmedEffect is ActionEffect.Send or ActionEffect.Post or ActionEffect.Delete;
     public bool Begin(UiSettings settings, ActionEffect confirmedEffect, bool remote)
     {
-        if (remote || settings.FreeMode || settings.FreeModeAsked || confirmedEffect is not (ActionEffect.Send or ActionEffect.Post or ActionEffect.Delete)) return false;
+        Cancel();
+        if (!Eligible(settings, confirmedEffect, remote)) return false;
         expires = now().AddSeconds(20); return true;
     }
     public void Cancel() => expires = DateTimeOffset.MinValue;

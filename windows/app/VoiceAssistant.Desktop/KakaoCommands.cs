@@ -53,6 +53,7 @@ public partial class App
         RemoteExecution.Current?.GrantPrepared(action, effect);
         RemoteExecution.Guard(action, false);
         var result = await chats.ApplyAsync(action, token);
+        if (decision == ConsentDecision.Ask) ConfirmedExecutionSucceeded(effect, token);
         actionHistory.Record(result.SendRequested ? "카카오톡 전송 요청" : "카카오톡 초안 입력", unavailable: "카카오톡에서 초안과 전송 결과를 직접 확인하세요.");
         return KakaoChats.Summary(result);
     }

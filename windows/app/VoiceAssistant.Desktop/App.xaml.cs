@@ -43,6 +43,7 @@ public partial class App : System.Windows.Application
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
         hands.EditHistory = actionHistory;
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--execution-consent-app-only")) { Shutdown(await RunExecutionConsentAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--input-device-app-only")) { Shutdown(InputDeviceAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--codex-effort-app-only")) { Shutdown(CodexEffortAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--wake-phrase-app-only")) { Shutdown(WakePhraseAppChecks.Run()); return; }
@@ -87,6 +88,7 @@ public partial class App : System.Windows.Application
         window.LoadSettings(settings);
         overlay.Configure(settings.Desktop);
         window.CommandSubmitted += text => _ = SubmitAsync(text, false);
+        window.FreeModeAnswered += SubmitFreeModeAnswer;
         window.ListenToggled += ToggleListening; window.WakeRequested += Wake; window.StopRequested += StopTurn;
         window.QuitRequested += Quit;
         window.ProAccountChanged += RestartRemote;
@@ -165,6 +167,7 @@ public partial class App : System.Windows.Application
     }
     void Tick()
     {
+        if (!freeModeOffer.Pending) window.SetFreeModeOffer(false);
         hands.TrackForeground();
         if (listening && settings.Language != "ko") WhisperEngine.Shared.KeepWarm();
         ReconcileMicrophonePause();
@@ -238,7 +241,7 @@ public partial class App : System.Windows.Application
     {
         if(personalEditorOpen || holding)return;
         if (!listening && !starting) RememberListening(true);
-        StopTurn();if(!listening&&!starting)StartListening();
+        StopTurn(preserveExecutionOffer: freeModeOffer.Pending && !busy && !speaking);if(!listening&&!starting)StartListening();
         BeginManualMicrophone();
         holding=true;awakeUntil=DateTimeOffset.MaxValue;CaptureInput(true);
         overlay.SetContent("누르는 동안 듣고 있어요","다 말하면 키를 놓으세요. 최대 30초까지 말할 수 있어요.",false);overlay.ShowOverlay();RefreshStatus();
@@ -248,8 +251,10 @@ public partial class App : System.Windows.Application
         holding=false;microphonePause.BeginManual(TimeSpan.FromSeconds(5));awakeUntil=DateTimeOffset.Now.AddSeconds(5);input.EndUtterance();
         window.SetStatus("말씀을 확인하는 중","키를 놓으면 인식을 끝내고 명령을 처리해요.",listening,true);
     }
-    void StopTurn()
+    void StopTurn() => StopTurn(preserveExecutionOffer: false);
+    void StopTurn(bool preserveExecutionOffer)
     {
+        if (!preserveExecutionOffer) CancelExecutionOffer();
         CancelMultilingualStartup();
         CancelWakeCheck();
         EndSpeechBarge(true, false); waitingBarge = false; bargeInputUntil = DateTimeOffset.MinValue;
@@ -333,6 +338,7 @@ public partial class App : System.Windows.Application
         if (isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", "멈췄어요."); return; }
         var previousGreeting = greetingWindow; greetingWindow = null; previousGreeting?.Close();
         turn?.Cancel(); var own = RemoteExecution.Current is { } remote ? CancellationTokenSource.CreateLinkedTokenSource(remote.Token) : new CancellationTokenSource(); turn = own; var token = own.Token;
+        offerAfterTurn = null; window.SetFreeModeOffer(false);
         busy = true; CaptureInput(false); RefreshStatus();
         try
         {
@@ -358,6 +364,8 @@ public partial class App : System.Windows.Application
                 catch (Exception ex) when (ex is not OperationCanceledException) { window.AddMessage("system", "Whisper 보정을 사용하지 못해 실시간 인식 결과를 사용해요. " + ex.Message); }
             }
             token.ThrowIfCancellationRequested(); window.SetPartial(""); window.AddMessage("user", text);
+            if (!isDictation && await AnswerExecutionOfferAsync(text, token)) return;
+            if (isDictation) CancelExecutionOffer();
             var kakaoCommand = isDictation ? null : KakaoCommands.Parse(text);
             AppPaths.Log("command", kakaoCommand == null ? text : "카카오톡 요청");
             if(isDictation ? DictationProcessor.IsStop(text, settings.Name) : parsed?.Actions.FirstOrDefault()?.Kind=="stop"){StopTurn();window.AddMessage("assistant","멈췄어요.");return;}
@@ -378,7 +386,7 @@ public partial class App : System.Windows.Application
             if (kakaoCommand != null)
             {
                 var kakaoReply = await RunKakaoAsync(kakaoCommand, token);
-                token.ThrowIfCancellationRequested(); window.AddMessage("assistant", kakaoReply); await SayAsync(kakaoReply, token); return;
+                token.ThrowIfCancellationRequested(); window.AddMessage("assistant", kakaoReply); await SayAsync(kakaoReply, token); await OfferExecutionModeAsync(token); return;
             }
             parsed = ResolveWithShared(text, parsed, out var sharedUsed);
             if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", "멈췄어요."); return; }
@@ -389,6 +397,7 @@ public partial class App : System.Windows.Application
                 var screen = ""; if (Regex.IsMatch(text, "화면|지금.*창|버튼|이거|이 글")) { try { screen = hands.ScreenContext(); } catch (Exception ex) { screen = "화면을 읽을 수 없음: " + ex.Message; } }
                 var run = await RunAiAsync(text, screen, token);
                 token.ThrowIfCancellationRequested();
+                if (!run.Finished) offerAfterTurn = null;
                 if (run.Finished) brain.RememberTurn(text, run.Reply);
                 if (run.LearningPlan is { } learned) { personal.Learn(text, learned); RecordSharedLearning(text, learned); }
                 parsed = new(run.Reply, Array.Empty<AssistantAction>());
@@ -402,6 +411,8 @@ public partial class App : System.Windows.Application
             }
             WindowsActions.InputTarget? localKeyTarget = null;
             WindowsActions.KeyFocus? localKeyFocus = null;
+            PreparedButton? localButton = null;
+            var confirmedEffects = new System.Collections.Generic.Dictionary<AssistantAction, ActionEffect>();
             if (confirmations.Length > 0)
             {
                 var details = string.Join("\n", confirmations.Select(a => $"• {a.Kind}: {a.Value}"));
@@ -410,40 +421,54 @@ public partial class App : System.Windows.Application
                 if (parsed.Actions.Count == 1 && parsed.Actions[0].Kind == "key")
                 {
                     hands.TrackForeground(); localKeyTarget = hands.CaptureInputTarget(); localKeyFocus = await hands.CaptureKeyFocusAsync(localKeyTarget, token);
-                    var effect = ExecutionConsent.Effect(parsed.Actions[0], localKeyFocus.Name);
+                    var effect = ExecutionConsent.Effect(parsed.Actions[0], localKeyFocus.Name, localKeyFocus.Context);
                     var decision = ExecutionConsent.Decide(settings.FreeMode, parsed.Actions[0], false, effect, RemoteExecution.Current != null);
                     if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("이 키 입력은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
                     approved = decision == ConsentDecision.Run || ActionApprovalWindow.Confirm(window, $"대상: {target}\n\n{AgentRun.Describe(parsed.Actions[0])}\n키를 받을 항목: {localKeyFocus.Name}", token);
+                    if (approved && decision == ConsentDecision.Ask) confirmedEffects[parsed.Actions[0]] = effect;
                     if (approved) RemoteExecution.Current?.GrantPrepared(parsed.Actions[0], effect);
+                }
+                else if (settings.FreeMode && parsed.Actions.Count == 1 && parsed.Actions[0].Kind == "tap")
+                {
+                    hands.TrackForeground(); localKeyTarget = hands.CaptureInputTarget();
+                    var controls = new DesktopControls(hands.DesktopControlDriver(localKeyTarget));
+                    localButton = await controls.PrepareButtonAsync(parsed.Actions[0], token);
+                    var decision = ExecutionConsent.Decide(true, parsed.Actions[0], false, localButton.Effect, RemoteExecution.Current != null);
+                    if (decision == ConsentDecision.HoldRemote) throw new AgentStoppedException("이 버튼은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
+                    approved = decision == ConsentDecision.Run || ActionApprovalWindow.Confirm(window, controls.Describe(new("press_control", localButton.Id)), token);
+                    if (approved && decision == ConsentDecision.Ask) confirmedEffects[parsed.Actions[0]] = localButton.Effect;
+                    if (approved) RemoteExecution.Current?.GrantPrepared(parsed.Actions[0], localButton.Effect);
                 }
                 else
                 {
                     if (RemoteExecution.Current != null) throw new AgentStoppedException("이 동작은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
                     approved = MessageBox.Show(window, $"대상: {target}\n\n{details}\n\n실행할까요?", "실행 내용 확인", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+                    if (approved) foreach (var action in confirmations) confirmedEffects[action] = ExecutionConsent.Effect(action);
                 }
                 if (!approved) { window.AddMessage("assistant", "실행을 취소했어요."); return; }
             }
-            foreach (var action in parsed.Actions) { token.ThrowIfCancellationRequested(); var result=await ExecuteAsync(action, token, localKeyTarget, localKeyFocus); if(result!=null&&parsed.Actions.Count==1)parsed=parsed with{Reply=result};AppPaths.Log("action", JsonSerializer.Serialize(action)); }
+            foreach (var action in parsed.Actions) { token.ThrowIfCancellationRequested(); var result=await ExecuteAsync(action, token, localKeyTarget, localKeyFocus, localButton); if (confirmedEffects.TryGetValue(action, out var confirmedEffect)) ConfirmedExecutionSucceeded(confirmedEffect, token); if(result!=null&&parsed.Actions.Count==1)parsed=parsed with{Reply=result};AppPaths.Log("action", JsonSerializer.Serialize(action)); }
             if (sharedUsed != null && RemoteExecution.Current == null) lastShared = (sharedUsed, DateTimeOffset.UtcNow);
             window.AddMessage("assistant", parsed.Reply); overlay.SetContent(settings.Name, parsed.Reply, false); if (greetingWindow == null) overlay.ShowOverlay(); overlayUntil = DateTimeOffset.Now.AddSeconds(8); AppPaths.Log("reply", parsed.Reply);
             await SayAsync(parsed.Reply, token);
+            await OfferExecutionModeAsync(token);
         }
         catch (OperationCanceledException) { RemoteExecution.Current?.Capture("assistant", "요청이 중지됐어요. 이미 실행된 동작은 PC 화면에서 확인하세요."); if (!token.IsCancellationRequested) ShowError("응답 시간이 초과됐어요. 다시 시도하세요."); }
         catch (Exception ex) { if (turn == own) ShowError(ex.Message); }
         finally
         {
-            if (turn == own) { busy = false; speaking = false; awakeUntil = listening&&!microphonePause.AutomaticPaused&&settings.Activation!="hold" ? DateTimeOffset.Now.AddSeconds(settings.FollowUpSeconds) : DateTimeOffset.MinValue; CaptureInput(ShouldCaptureSpeech()); RefreshStatus(); turn = null; }
+            if (turn == own) { offerAfterTurn = null; busy = false; speaking = false; awakeUntil = listening&&!microphonePause.AutomaticPaused&&settings.Activation!="hold" ? DateTimeOffset.Now.AddSeconds(freeModeOffer.Pending ? Math.Max(20, settings.FollowUpSeconds) : settings.FollowUpSeconds) : DateTimeOffset.MinValue; CaptureInput(ShouldCaptureSpeech()); RefreshStatus(); turn = null; }
             own.Dispose();
         }
     }
-    async Task<string?> ExecuteAsync(AssistantAction action, CancellationToken token, WindowsActions.InputTarget? expected = null, WindowsActions.KeyFocus? keyFocus = null)
+    async Task<string?> ExecuteAsync(AssistantAction action, CancellationToken token, WindowsActions.InputTarget? expected = null, WindowsActions.KeyFocus? keyFocus = null, PreparedButton? button = null)
     {
         RemoteExecution.Guard(action, false);
         await executionGate.WaitAsync(token);
-        try { return await ExecuteTrackedAsync(action, token, expected, keyFocus); }
+        try { return await ExecuteTrackedAsync(action, token, expected, keyFocus, button); }
         finally { executionGate.Release(); }
     }
-    async Task<string?> ExecuteTrackedAsync(AssistantAction action, CancellationToken token, WindowsActions.InputTarget? expected = null, WindowsActions.KeyFocus? keyFocus = null)
+    async Task<string?> ExecuteTrackedAsync(AssistantAction action, CancellationToken token, WindowsActions.InputTarget? expected = null, WindowsActions.KeyFocus? keyFocus = null, PreparedButton? button = null)
     {
         if (action.Kind == "history") return actionHistory.Describe();
         if (action.Kind == "undo") return await actionHistory.UndoAsync(token);
@@ -455,7 +480,7 @@ public partial class App : System.Windows.Application
         }
         var version = actionHistory.Version;
         string? reply;
-        try { reply = await ExecuteCoreAsync(action, token, expected, keyFocus); }
+        try { reply = await ExecuteCoreAsync(action, token, expected, keyFocus, button); }
         catch
         {
             if (version == actionHistory.Version && action.Kind is "type" or "key" or "tap" or "browser") actionHistory.Record("진행 중 중단된 입력 요청", unavailable: "대상 앱에서 실제 반영된 내용을 확인하세요.");
@@ -468,10 +493,12 @@ public partial class App : System.Windows.Application
         }
         return reply;
     }
-    async Task<string?> ExecuteCoreAsync(AssistantAction action, CancellationToken token, WindowsActions.InputTarget? expected = null, WindowsActions.KeyFocus? keyFocus = null)
+    async Task<string?> ExecuteCoreAsync(AssistantAction action, CancellationToken token, WindowsActions.InputTarget? expected = null, WindowsActions.KeyFocus? keyFocus = null, PreparedButton? button = null)
     {
         switch (action.Kind)
         {
+            case "tap" when button != null:
+                await button.ApplyAsync(action, token); break;
             case "answer": break;
             case "greet":
                 ShowGreeting(settings);

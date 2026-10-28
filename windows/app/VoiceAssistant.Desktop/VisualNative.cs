@@ -16,6 +16,32 @@ public sealed partial class WindowsActions
     internal IVisualDriver VisualDriver(InputTarget expected) => new NativeVisualDriver(this, expected);
     sealed class NativeVisualDriver(WindowsActions owner, InputTarget expected) : IVisualDriver
     {
+        public Task<VisualTarget?> TargetAsync(VisualFrame frame, int x, int y, CancellationToken token) => Task.Run(() =>
+        {
+            token.ThrowIfCancellationRequested(); owner.RequireInputTarget(expected);
+            if (Native.GetForegroundWindow() != expected.Window || VisualNative.Bounds(expected.Window) != frame.Bounds || Native.Title(expected.Window) != frame.Title) throw new AgentStoppedException("누를 대상을 읽는 동안 창이 바뀌었어요.");
+            var point = VisualControls.ToScreen(frame, x, y); VisualNative.CheckPoint(expected.Window, point.X, point.Y);
+            var element = AutomationElement.FromPoint(new System.Windows.Point(point.X, point.Y));
+            var reader = new NativeControlDriver(owner, expected);
+            try
+            {
+                for (var depth = 0; element != null && depth < 24; depth++, element = TreeWalker.ControlViewWalker.GetParent(element))
+                {
+                    token.ThrowIfCancellationRequested(); var info = element.Current;
+                    if (info.IsPassword) throw new AgentStoppedException("보호된 항목은 누르지 않아요.");
+                    if (info.ProcessId != expected.ProcessId) return (VisualTarget?)null;
+                    if (info.NativeWindowHandle == expected.Window.ToInt64()) break;
+                    if (reader.Describe(element) is { } control)
+                    {
+                        owner.RequireInputTarget(expected); token.ThrowIfCancellationRequested();
+                        return new VisualTarget(control.Key, control.Name, control.Context, control.Role, control.State, control.Revision);
+                    }
+                }
+            }
+            catch (ElementNotAvailableException) { throw new AgentStoppedException("누를 항목이 사라져 멈췄어요."); }
+            catch (Exception ex) when (ex is NotSupportedException || ex is InvalidOperationException and not AgentStoppedException) { return (VisualTarget?)null; }
+            return (VisualTarget?)null;
+        }, token);
         public async Task<VisualFrame> CaptureAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested(); owner.RequireInputTarget(expected);

@@ -12,6 +12,11 @@ public sealed record DesktopControl(string Key, string Role, string Name, string
 public sealed record DesktopControlSnapshot(string Application, string Window, IReadOnlyList<DesktopControl> Controls, bool Truncated = false);
 public sealed record ObservedControl(string Id, string Role, string Name, string Context, string Operation, bool Editable, string State, int? SelectionStart = null, int SelectionLength = 0);
 public sealed record ControlPage(string Application, string Window, IReadOnlyList<ObservedControl> Controls, int Total, int? Next, bool Truncated);
+internal sealed record PreparedButton(AssistantAction Action, DesktopControls Controls, string Id, ActionEffect Effect)
+{
+    internal Task ApplyAsync(AssistantAction action, CancellationToken token) => action == Action
+        ? Controls.PressAsync(Id, token) : throw new AgentStoppedException("준비한 버튼과 다른 요청이라 실행하지 않았어요.");
+}
 public static class ControlObservation
 {
     public static string Data(ControlPage page)
@@ -43,11 +48,13 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
     readonly Func<DateTimeOffset> now = clock ?? (() => DateTimeOffset.UtcNow);
     readonly Dictionary<string, DesktopControl> observed = new(StringComparer.Ordinal);
     DateTimeOffset expires;
+    string observedWindow = "";
     public async Task<ControlPage> ListAsync(string filter, int offset, CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); observed.Clear();
         if (filter.Length > 120 || offset is < 0 or > 240) throw new ArgumentException("화면 목록의 검색어나 페이지를 확인하세요.");
         var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();
+        observedWindow = snapshot.Window;
         var all = snapshot.Controls.Where(x => filter.Length == 0 || x.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || x.Context.Contains(filter, StringComparison.OrdinalIgnoreCase)).Take(240).ToArray();
         var page = all.Skip(offset).Take(PageSize).Select(x =>
         {
@@ -76,7 +83,19 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
     public ActionEffect Effect(AssistantAction action)
     {
         var control = Find(action.Kind is "fill_field" or "insert_field" ? action.Target : action.Value);
-        return ExecutionConsent.Effect(action, control.Name, control.Context);
+        return ExecutionConsent.Effect(action, control.Name, control.Context + " / " + observedWindow);
+    }
+    internal async Task<PreparedButton> PrepareButtonAsync(AssistantAction action, CancellationToken token)
+    {
+        if (action.Kind != "tap") throw new ArgumentException("이름으로 누를 버튼 요청이 필요해요.");
+        token.ThrowIfCancellationRequested(); observed.Clear();
+        var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested(); observedWindow = snapshot.Window;
+        if (snapshot.Truncated) throw new AgentStoppedException("버튼 목록 전체를 확인하지 못했어요. 목록에서 정확한 항목 ID로 요청해 주세요.");
+        var matches = snapshot.Controls.Where(x => x.Operation == "invoke" && x.Role is "Button" or "Hyperlink" or "MenuItem")
+            .Where(x => string.Equals(x.Name, action.Value, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length != 1) throw new AgentStoppedException("같은 이름의 버튼을 하나로 확인하지 못했어요. 목록에서 정확한 항목 ID로 요청해 주세요.");
+        var id = Guid.NewGuid().ToString("N"); observed[id] = matches[0]; expires = now().AddMinutes(2);
+        return new(action, this, id, ExecutionConsent.Effect(action, matches[0].Name, matches[0].Context + " / " + snapshot.Window));
     }
     public async Task PressAsync(string id, CancellationToken token)
     {
