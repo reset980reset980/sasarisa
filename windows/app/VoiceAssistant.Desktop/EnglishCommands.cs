@@ -91,6 +91,10 @@ internal static class EnglishCommands
             var name = app.Groups[1].Value;
             if (CommandParser.Apps.TryGetValue(name, out var target)) return One("Opened " + name + ".", "open_app", target);
             if (registry.Resolve(name) is { } registered) return One("Opened " + registered.Name + ".", "open_app", registered.Id);
+            // These are fallbacks, not newly reserved registry names. Existing
+            // user aliases must keep working and remain editable after updates.
+            var fallback = name.ToLowerInvariant() switch { "notes" or "textedit" => "notepad", "finder" or "file explorer" => "explorer", _ => null };
+            if (fallback != null) return One("Opened " + name + ".", "open_app", fallback);
         }
         if (YouTubeCommands.OpensHome(text)) return One("Opened YouTube.", "open_url", "https://www.youtube.com/");
         var play = Regex.Match(text, @"^play\s+(.+?)\s+on\s+youtube$", Options);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace VoiceAssistant.Desktop;
 
@@ -91,6 +92,20 @@ internal static class EnglishCommandChecks
             Is("have Codex write tests", "delegate_codex", "write tests");
             Require(CommandParser.Parse("tell Claude to fix the login bug") == null, "Existing session became a new CLI session");
             Require(ActionPolicy.NeedsConfirmation(Parse("ask Claude to fix the bug"), false), "Handoff lost its consent policy");
+        });
+        Check("New platform aliases preserve existing user registered apps and remain editable", () =>
+        {
+            var file = Path.Combine(AppPaths.Home, "legacy-app-aliases-" + Guid.NewGuid().ToString("N") + ".json");
+            var path = Path.Combine(Environment.SystemDirectory, "notepad.exe");
+            var legacy = new[] { new RegisteredApp("custom:" + Guid.NewGuid().ToString("N"), "Notes", path), new RegisteredApp("custom:" + Guid.NewGuid().ToString("N"), "File Explorer", path) };
+            File.WriteAllText(file, JsonSerializer.Serialize(legacy)); var registry = new AppRegistry(file);
+            foreach (var item in legacy)
+            {
+                Require(CommandParser.Parse("open " + item.Name, registry)!.Actions.Single().Value == item.Id, "New alias hid the registered app: " + item.Name);
+                Require(CommandParser.Parse(item.Name + " 열어", registry)!.Actions.Single().Value == item.Id, "Korean command lost the registered app");
+                registry.Save(item.Name, path, item.Id);
+            }
+            Require(new AppRegistry(file).Items.Count == legacy.Length, "Editing lost a registered alias");
         });
         Check("English dictation controls do not consume ordinary dictated sentences", () =>
         {
