@@ -21,7 +21,7 @@ public partial class MainWindow
         var dialog = new VoiceSettingsWindow(speech) { Owner = this }; voiceSettingsWindow = dialog;
         dialog.PreviewRequested += value => SpeakTestRequested?.Invoke(value);
         dialog.StopRequested += () => StopRequested?.Invoke();
-        try { if (dialog.ShowDialog() == true) { voicePreferences = dialog.Result!; VoiceProviderSummary.Text = ExternalVoice.Name(voicePreferences.Provider) + " · 설정 저장 전"; } }
+        try { if (dialog.ShowDialog() == true) { voicePreferences = dialog.Result!; VoiceProviderSummary.Text = ExternalVoice.Name(voicePreferences.Provider) + UiText.Get(" · 설정 저장 전"); } }
         finally { StopRequested?.Invoke(); voiceSettingsWindow = null; }
     }
 }
@@ -32,9 +32,9 @@ public sealed class VoiceSettingsWindow : Window
     readonly ComboBox provider = new() { DisplayMemberPath = "Label", SelectedValuePath = "Id", MinHeight = 34 };
     readonly ComboBox proVoice = new() { DisplayMemberPath = "Label", SelectedValuePath = "Id", MinHeight = 34 };
     readonly StackPanel proVoiceRow = new();
-    readonly TextBox voice = Field("외부 목소리 ID"), model = Field("외부 음성 모델"), region = Field("Azure 음성 지역"), url = Field("외부 음성 서버 주소"), speed = Field("외부 음성 속도");
+    readonly TextBox voice = Field(UiText.Get("외부 목소리 ID")), model = Field(UiText.Get("외부 음성 모델")), region = Field(UiText.Get("Azure 음성 지역")), url = Field(UiText.Get("외부 음성 서버 주소")), speed = Field(UiText.Get("외부 음성 속도"));
     readonly PasswordBox key = new() { MinHeight = 34, Padding = new Thickness(8) };
-    readonly CheckBox fallback = new() { Content = "외부 음성 실패 시 Windows 기본 목소리로 읽기", Margin = new Thickness(0,14,0,10) };
+    readonly CheckBox fallback = new() { Content = UiText.Get("외부 음성 실패 시 Windows 기본 목소리로 읽기"), Margin = new Thickness(0,14,0,10) };
     readonly TextBlock help = Help(""), destination = Help(""), keyStatus = Help(""), feedback = Help("");
     readonly StackPanel voiceRow = new(), modelRow = new(), regionRow = new(), urlRow = new(), speedRow = new(), keyRow = new();
     readonly Dictionary<string, VoicePreferences> drafts = new();
@@ -48,23 +48,23 @@ public sealed class VoiceSettingsWindow : Window
     static Button Button(string label, RoutedEventHandler clicked) { var button = new Button { Content = label, Padding = new Thickness(14,8,14,8), Margin = new Thickness(0,0,9,0), MinWidth = 75 }; button.Click += clicked; return button; }
     public VoiceSettingsWindow(UiSettings settings)
     {
-        original = settings; Title = "목소리 제공자 설정"; Width = 620; Height = 700; MinWidth = 530; MinHeight = 500; WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        original = settings; Title = UiText.Get("목소리 제공자 설정"); Width = 620; Height = 700; MinWidth = 530; MinHeight = 500; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = new SolidColorBrush(Color.FromRgb(247,247,241)); FontFamily = new FontFamily("Malgun Gothic"); FontSize = 13;
         var root = new DockPanel { Margin = new Thickness(24) };
         var buttons = new WrapPanel { Margin = new Thickness(0,16,0,0) }; DockPanel.SetDock(buttons, Dock.Bottom);
-        buttons.Children.Add(Button("목소리 시험", Preview)); buttons.Children.Add(Button("시험 중지", (_,_) => { StopRequested?.Invoke(); Report("시험 출력을 중지했어요.", false); }));
-        buttons.Children.Add(Button("이 설정 사용", Apply)); buttons.Children.Add(Button("닫기", (_,_) => Close())); root.Children.Add(buttons);
+        buttons.Children.Add(Button(UiText.Get("목소리 시험"), Preview)); buttons.Children.Add(Button(UiText.Get("시험 중지"), (_,_) => { StopRequested?.Invoke(); Report("시험 출력을 중지했어요.", false); }));
+        buttons.Children.Add(Button(UiText.Get("이 설정 사용"), Apply)); buttons.Children.Add(Button(UiText.Get("닫기"), (_,_) => Close())); root.Children.Add(buttons);
         var panel = new StackPanel(); root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }); Content = root;
-        panel.Children.Add(new TextBlock { Text = "답변을 읽어 줄 목소리", FontSize = 22, FontWeight = FontWeights.Bold });
-        panel.Children.Add(Help("외부 제공자에는 읽을 문장이 전달되며 서비스 사용료가 발생할 수 있습니다. 재생되는 음성은 합성된 AI 목소리입니다. 출력 장치와 음량은 앞의 설정을 사용합니다."));
-        provider.ItemsSource = new[] { new DeviceOption("windows","Windows 기본 음성"), new DeviceOption("pro","Sasarisa Pro"), new DeviceOption("elevenlabs","ElevenLabs"), new DeviceOption("openai","OpenAI"), new DeviceOption("azure","Azure Speech"), new DeviceOption("http","사용자 음성 서버") };
-        AutomationProperties.SetName(provider, "음성 제공자"); panel.Children.Add(provider); panel.Children.Add(help);
-        proVoice.ItemsSource = ProAccountClient.Voices; AutomationProperties.SetName(proVoice, "Pro 목소리"); FieldRow(proVoiceRow, "Pro 목소리", proVoice); panel.Children.Add(proVoiceRow);
-        FieldRow(voiceRow, "목소리 이름 / Voice ID", voice); FieldRow(modelRow, "음성 모델", model); FieldRow(regionRow, "Azure 리소스 지역", region); FieldRow(urlRow, "음성 생성 서버 주소", url); FieldRow(speedRow, "외부 읽기 속도 (1 = 기본)", speed);
+        panel.Children.Add(new TextBlock { Text = UiText.Get("답변을 읽어 줄 목소리"), FontSize = 22, FontWeight = FontWeights.Bold });
+        panel.Children.Add(Help(UiText.Get("외부 제공자에는 읽을 문장이 전달되며 서비스 사용료가 발생할 수 있습니다. 재생되는 음성은 합성된 AI 목소리입니다. 출력 장치와 음량은 앞의 설정을 사용합니다.")));
+        provider.ItemsSource = new[] { new DeviceOption("windows",UiText.Get("Windows 기본 음성")), new DeviceOption("pro","Sasarisa Pro"), new DeviceOption("elevenlabs","ElevenLabs"), new DeviceOption("openai","OpenAI"), new DeviceOption("azure","Azure Speech"), new DeviceOption("http",UiText.Get("사용자 음성 서버")) };
+        AutomationProperties.SetName(provider, UiText.Get("음성 제공자")); panel.Children.Add(provider); panel.Children.Add(help);
+        proVoice.ItemsSource = ProAccountClient.Voices; AutomationProperties.SetName(proVoice, UiText.Get("Pro 목소리")); FieldRow(proVoiceRow, UiText.Get("Pro 목소리"), proVoice); panel.Children.Add(proVoiceRow);
+        FieldRow(voiceRow, UiText.Get("목소리 이름 / Voice ID"), voice); FieldRow(modelRow, UiText.Get("음성 모델"), model); FieldRow(regionRow, UiText.Get("Azure 리소스 지역"), region); FieldRow(urlRow, UiText.Get("음성 생성 서버 주소"), url); FieldRow(speedRow, UiText.Get("외부 읽기 속도 (1 = 기본)"), speed);
         foreach (var row in new[] { voiceRow, modelRow, regionRow, urlRow, speedRow }) panel.Children.Add(row);
-        AutomationProperties.SetName(key, "음성 API 키"); FieldRow(keyRow, "음성 API 키", key); keyRow.Children.Add(destination); keyRow.Children.Add(keyStatus);
-        var keyButtons = new WrapPanel(); keyButtons.Children.Add(Button("키 저장", SaveKey)); keyButtons.Children.Add(Button("저장한 키 삭제", DeleteKey)); keyRow.Children.Add(keyButtons); panel.Children.Add(keyRow); panel.Children.Add(fallback); panel.Children.Add(feedback);
-        panel.Children.Add(Help("키는 설정 파일에 기록하지 않고 Windows에 별도로 보관합니다. ‘이 설정 사용’으로 닫은 뒤 메인 화면의 ‘설정 저장’을 눌러 적용하세요."));
+        AutomationProperties.SetName(key, UiText.Get("음성 API 키")); FieldRow(keyRow, UiText.Get("음성 API 키"), key); keyRow.Children.Add(destination); keyRow.Children.Add(keyStatus);
+        var keyButtons = new WrapPanel(); keyButtons.Children.Add(Button(UiText.Get("키 저장"), SaveKey)); keyButtons.Children.Add(Button(UiText.Get("저장한 키 삭제"), DeleteKey)); keyRow.Children.Add(keyButtons); panel.Children.Add(keyRow); panel.Children.Add(fallback); panel.Children.Add(feedback);
+        panel.Children.Add(Help(UiText.Get("키는 설정 파일에 기록하지 않고 Windows에 별도로 보관합니다. ‘이 설정 사용’으로 닫은 뒤 메인 화면의 ‘설정 저장’을 눌러 적용하세요.")));
         drafts[settings.Tts.Provider] = settings.Tts with { }; provider.SelectionChanged += ProviderChanged;
         url.LostFocus += (_,_) => UpdateKey(); region.LostFocus += (_,_) => UpdateKey(); provider.SelectedValue = settings.Tts.Provider;
         Closed += (_,_) => { key.Clear(); StopRequested?.Invoke(); };
@@ -94,20 +94,20 @@ public sealed class VoiceSettingsWindow : Window
         speedRow.Visibility = id is "windows" or "http" or "pro" ? Visibility.Collapsed : Visibility.Visible;
         help.Text = id switch
         {
-            "windows" => "인터넷 없이 Windows에 설치된 목소리로 읽습니다. 목소리와 속도는 앞 화면에서 선택합니다.",
-            "pro" => "앞 화면의 ‘Pro 계정 연결·사용량’에서 TurtleMaker 계정을 연결하세요. 읽을 문장을 maker.buffm.com에 전달하며 월 음성 한도가 적용됩니다. 연결·한도·서버 문제 시 Windows 기본 목소리로 읽습니다.",
-            "elevenlabs" => "ElevenLabs에서 사용할 Voice ID를 입력하세요. 읽기 속도는 0.7~1.2배입니다.",
-            "openai" => "원본과 같은 Speech API를 사용합니다. gpt-4o-mini-tts·tts-1 계열은 2027-01-06 서비스 종료 예정입니다. Realtime 모델은 이 칸에서 사용할 수 없습니다.",
-            "azure" => "Azure Speech 리소스의 키와 지역을 입력하세요. 한국어 기본 목소리는 ko-KR-SunHiNeural이며 읽기 속도는 0.5~2배입니다.",
-            _ => "서버는 text·voice·language JSON을 받아 WAV 또는 MP3를 반환해야 합니다. HTTPS 또는 이 PC의 HTTP 주소를 사용하며 API 키는 선택 사항입니다. 속도는 서버에서 정합니다."
+            "windows" => UiText.Get("인터넷 없이 Windows에 설치된 목소리로 읽습니다. 목소리와 속도는 앞 화면에서 선택합니다."),
+            "pro" => UiText.Get("앞 화면의 ‘Pro 계정 연결·사용량’에서 TurtleMaker 계정을 연결하세요. 읽을 문장을 maker.buffm.com에 전달하며 월 음성 한도가 적용됩니다. 연결·한도·서버 문제 시 Windows 기본 목소리로 읽습니다."),
+            "elevenlabs" => UiText.Get("ElevenLabs에서 사용할 Voice ID를 입력하세요. 읽기 속도는 0.7~1.2배입니다."),
+            "openai" => UiText.Get("원본과 같은 Speech API를 사용합니다. gpt-4o-mini-tts·tts-1 계열은 2027-01-06 서비스 종료 예정입니다. Realtime 모델은 이 칸에서 사용할 수 없습니다."),
+            "azure" => UiText.Get("Azure Speech 리소스의 키와 지역을 입력하세요. 한국어 기본 목소리는 ko-KR-SunHiNeural이며 읽기 속도는 0.5~2배입니다."),
+            _ => UiText.Get("서버는 text·voice·language JSON을 받아 WAV 또는 MP3를 반환해야 합니다. HTTPS 또는 이 PC의 HTTP 주소를 사용하며 API 키는 선택 사항입니다. 속도는 서버에서 정합니다.")
         };
         feedback.Text = ""; loading = false; UpdateKey();
     }
     void UpdateKey()
     {
         if (selected is "windows" or "pro" || loading) return;
-        try { var p = ReadFields(); destination.Text = "키 사용 주소: " + (p.Provider == "elevenlabs" ? "https://api.elevenlabs.io" : ExternalVoice.Endpoint(p).GetLeftPart(UriPartial.Path)); keyStatus.Text = CredentialStore.Read(ExternalVoice.CredentialTarget(p)) != null ? "이 음성 제공자·주소의 키가 저장되어 있어요." : "저장된 음성 API 키가 없어요."; }
-        catch (Exception ex) { destination.Text = "주소를 먼저 확인하세요."; keyStatus.Text = ex.Message; }
+        try { var p = ReadFields(); destination.Text = UiText.Get("키 사용 주소: ") + (p.Provider == "elevenlabs" ? "https://api.elevenlabs.io" : ExternalVoice.Endpoint(p).GetLeftPart(UriPartial.Path)); keyStatus.Text = CredentialStore.Read(ExternalVoice.CredentialTarget(p)) != null ? UiText.Get("이 음성 제공자·주소의 키가 저장되어 있어요.") : UiText.Get("저장된 음성 API 키가 없어요."); }
+        catch (Exception ex) { destination.Text = UiText.Get("주소를 먼저 확인하세요."); keyStatus.Text = ex.Message; }
     }
     void SaveKey(object sender, RoutedEventArgs e)
     {
@@ -119,7 +119,7 @@ public sealed class VoiceSettingsWindow : Window
         try
         {
             var target = ExternalVoice.CredentialTarget(ReadFields());
-            if (MessageBox.Show(this, "이 음성 제공자·주소의 저장된 키를 삭제할까요?", "키 삭제", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show(this, UiText.Get("이 음성 제공자·주소의 저장된 키를 삭제할까요?"), UiText.Get("키 삭제"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             CredentialStore.Delete(target); key.Clear(); UpdateKey(); Report("저장한 음성 API 키를 삭제했어요.", false);
         }
         catch (Exception ex) { Report(ex.Message, true); }

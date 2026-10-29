@@ -11,14 +11,14 @@ public partial class MainWindow
 {
     void LoadDesktopPreferences(DesktopPreferences preferences)
     {
-        WakeHotkeyInput.Text = HotkeySpec.Parse(preferences.WakeHotkey)?.Label ?? "사용 안 함";
-        StopHotkeyInput.Text = HotkeySpec.Parse(preferences.StopHotkey)?.Label ?? "사용 안 함";
+        WakeHotkeyInput.Text = HotkeySpec.Parse(preferences.WakeHotkey)?.Label ?? (UiText.Korean ? "사용 안 함" : "none");
+        StopHotkeyInput.Text = HotkeySpec.Parse(preferences.StopHotkey)?.Label ?? (UiText.Korean ? "사용 안 함" : "none");
         UserNameInput.Text = preferences.UserName;
         SelectTag(StartupListeningInput, preferences.StartupListening);
         SelectTag(OverlayPositionInput, preferences.OverlayPosition);
-        var screens = new List<DeviceOption> { new("active", "현재 사용 중인 화면"), new("primary", "기본 화면") };
-        screens.AddRange(System.Windows.Forms.Screen.AllScreens.Select((screen, i) => new DeviceOption(screen.DeviceName, $"화면 {i + 1} · {screen.Bounds.Width} × {screen.Bounds.Height}" + (screen.Primary ? " · 기본" : ""))));
-        if (screens.All(x => x.Id != preferences.OverlayScreen)) screens.Add(new(preferences.OverlayScreen, "이전 화면 · 현재 연결 안 됨"));
+        var screens = new List<DeviceOption> { new("active", UiText.Get("현재 사용 중인 화면")), new("primary", UiText.Get("기본 화면")) };
+        screens.AddRange(System.Windows.Forms.Screen.AllScreens.Select((screen, i) => new DeviceOption(screen.DeviceName, UiText.Format("화면 {0} · {1} × {2}",i + 1,screen.Bounds.Width,screen.Bounds.Height) + (screen.Primary ? UiText.Get(" · 기본") : ""))));
+        if (screens.All(x => x.Id != preferences.OverlayScreen)) screens.Add(new(preferences.OverlayScreen, UiText.Get("이전 화면 · 현재 연결 안 됨")));
         OverlayScreenInput.ItemsSource = screens; OverlayScreenInput.SelectedValue = preferences.OverlayScreen;
         IdleOrbInput.IsChecked = preferences.ShowIdleOrb;
         SelectTag(GreetingStyleInput, preferences.GreetingStyle);
@@ -26,20 +26,20 @@ public partial class MainWindow
         GreetingTextInput.Text = preferences.GreetingText; GreetingTitleInput.Text = preferences.GreetingTitle; GreetingSubtitleInput.Text = preferences.GreetingSubtitle;
         GreetingUrlsInput.Text = string.Join(Environment.NewLine, preferences.GreetingUrls);
         RefreshGreetingApps(preferences.GreetingApps);
-        HotkeyFeedback.Text = "다른 앱과 겹치는 조합은 저장되지 않습니다. 누르는 동안 말하기는 선택한 말하기 키를 놓을 때 끝납니다.";
+        HotkeyFeedback.Text = UiText.Get("다른 앱과 겹치는 조합은 저장되지 않습니다. 누르는 동안 말하기는 선택한 말하기 키를 놓을 때 끝납니다.");
     }
     void RefreshGreetingApps(string[]? selected = null)
     {
         selected ??= GreetingAppsInput.SelectedItems.OfType<DeviceOption>().Select(x => x.Id).ToArray();
         var apps = CommandParser.Apps.GroupBy(x => x.Value).Select(x => new DeviceOption(x.Key, x.First().Key)).Concat(AppRegistry.Default.Items.Select(x => new DeviceOption(x.Id, x.Name))).ToList();
-        foreach (var id in selected.Where(id => apps.All(x => x.Id != id))) apps.Add(new(id, "이전 앱 · 현재 등록 안 됨"));
+        foreach (var id in selected.Where(id => apps.All(x => x.Id != id))) apps.Add(new(id, UiText.Get("이전 앱 · 현재 등록 안 됨")));
         GreetingAppsInput.ItemsSource = apps;
         foreach (var app in apps.Where(x => selected.Contains(x.Id))) GreetingAppsInput.SelectedItems.Add(app);
     }
     public bool CaptureRegisteredHotkey(HotkeySpec? spec)
     {
         if (spec == null || !IsActive || Keyboard.FocusedElement is not TextBox field || (field != WakeHotkeyInput && field != StopHotkeyInput)) return false;
-        field.Text = spec.Label; HotkeyFeedback.Text = "저장하면 이 조합이 적용됩니다."; return true;
+        field.Text = spec.Label; HotkeyFeedback.Text = UiText.Get("저장하면 이 조합이 적용됩니다."); return true;
     }
     static string[] Lines(string text) => text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToArray();
     DesktopPreferences ReadDesktopPreferences() => new()
@@ -62,11 +62,11 @@ public partial class MainWindow
             if (modifiers.HasFlag(ModifierKeys.Control)) prefix.Add("Ctrl"); if (modifiers.HasFlag(ModifierKeys.Alt)) prefix.Add("Alt"); if (modifiers.HasFlag(ModifierKeys.Shift)) prefix.Add("Shift"); if (modifiers.HasFlag(ModifierKeys.Windows)) prefix.Add("Win");
             var name = key switch { Key.Back => "Backspace", Key.Return => "Enter", Key.Prior => "PageUp", Key.Next => "PageDown", >= Key.D0 and <= Key.D9 => ((char)('0' + key - Key.D0)).ToString(), _ => key.ToString() };
             prefix.Add(name); ((TextBox)sender).Text = HotkeySpec.Parse(string.Join('+', prefix))!.Label;
-            HotkeyFeedback.Text = "저장하면 이 조합이 적용됩니다.";
+            HotkeyFeedback.Text = UiText.Get("저장하면 이 조합이 적용됩니다.");
         }
         catch (ArgumentException ex) { HotkeyFeedback.Text = ex.Message; }
     }
-    void DisableWakeHotkey_Click(object sender, RoutedEventArgs e) => WakeHotkeyInput.Text = "사용 안 함";
+    void DisableWakeHotkey_Click(object sender, RoutedEventArgs e) => WakeHotkeyInput.Text = UiText.Korean ? "사용 안 함" : "none";
     void ResetHotkeys_Click(object sender, RoutedEventArgs e) { WakeHotkeyInput.Text = "Ctrl+Shift+Space"; StopHotkeyInput.Text = "Ctrl+Alt+Backspace"; }
     void PreviewOverlay_Click(object sender, RoutedEventArgs e)
     {

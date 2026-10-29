@@ -37,8 +37,8 @@ public sealed class SetupWindow : Window
 {
     readonly UiSettings original;
     readonly Func<UiSettings, string?> save;
-    readonly TextBox name = Field("비서 이름"), userName = Field("사용자 호칭");
-    readonly ComboBox brain = Combo("처음 사용할 AI"), voice = Combo("처음 사용할 목소리"), microphone = Combo("처음 사용할 마이크"), position = Combo("처음 알림 위치");
+    readonly TextBox name = Field(UiText.Get("비서 이름")), userName = Field(UiText.Get("사용자 호칭"));
+    readonly ComboBox brain = Combo(UiText.Get("처음 사용할 AI")), voice = Combo(UiText.Get("처음 사용할 목소리")), microphone = Combo(UiText.Get("처음 사용할 마이크")), position = Combo(UiText.Get("처음 알림 위치"));
     readonly TextBlock heading = new(), checks = new(), feedback = new();
     readonly StackPanel first = new(), second = new();
     readonly Button next, back, download, cancelDownload;
@@ -52,31 +52,31 @@ public sealed class SetupWindow : Window
     public SetupWindow(UiSettings settings, Func<UiSettings, string?> save)
     {
         original = settings; this.save = save;
-        Title = settings.Name + " · 처음 설정"; Width = 650; Height = 750; MinWidth = 560; MinHeight = 620;
+        Title = settings.Name + UiText.Get(" · 처음 설정"); Width = 650; Height = 750; MinWidth = 560; MinHeight = 620;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = (Brush)Application.Current.FindResource("CanvasBrush");
         var root = new DockPanel { Margin = new Thickness(28) }; Content = root;
         var top = new StackPanel { Margin = new Thickness(0,0,0,24) }; heading.FontSize = 25; heading.FontWeight = FontWeights.SemiBold;
-        top.Children.Add(heading); top.Children.Add(new TextBlock { Text = "나에게 맞게 준비한 뒤, 텍스트나 목소리로 시작하세요.", Foreground = Brushes.SlateGray, Margin = new Thickness(0,8,0,0) }); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
+        top.Children.Add(heading); top.Children.Add(new TextBlock { Text = UiText.Get("나에게 맞게 준비한 뒤, 텍스트나 목소리로 시작하세요."), Foreground = Brushes.SlateGray, Margin = new Thickness(0,8,0,0) }); DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         var footer = new StackPanel { Margin = new Thickness(0,18,0,0) }; feedback.TextWrapping = TextWrapping.Wrap; feedback.Foreground = Brushes.Firebrick; footer.Children.Add(feedback);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,12,0,0) };
-        var later = Button("나중에", (_,_) => Close()); back = Button("이전", (_,_) => Page(false)); next = Button("다음", (_,_) => Advance(), true);
+        var later = Button(UiText.Get("나중에"), (_,_) => Close()); back = Button(UiText.Get("이전"), (_,_) => Page(false)); next = Button(UiText.Get("다음"), (_,_) => Advance(), true);
         buttons.Children.Add(later); buttons.Children.Add(back); buttons.Children.Add(next); footer.Children.Add(buttons); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         var content = new Grid(); content.Children.Add(first); content.Children.Add(second); root.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0,0,10,0) });
-        AddField(first, "비서를 부를 이름", name); name.Text = settings.Name;
-        AddField(first, "비서가 나를 부를 호칭 (선택)", userName); userName.Text = settings.Desktop.UserName;
-        var providers = new List<DeviceOption> { new("claude", "Claude Code · 이 PC의 로그인"), new("codex", "Codex · 이 PC의 로그인"), new("aside", "Aside · 브라우저 작업"), new("combo", "조합 · Codex·Claude·Aside 자동 선택"), new("ollama", "Ollama · 로컬 모델") };
+        AddField(first, UiText.Get("비서를 부를 이름"), name); name.Text = settings.Name;
+        AddField(first, UiText.Get("비서가 나를 부를 호칭 (선택)"), userName); userName.Text = settings.Desktop.UserName;
+        var providers = new List<DeviceOption> { new("claude", UiText.Get("Claude Code · 이 PC의 로그인")), new("codex", UiText.Get("Codex · 이 PC의 로그인")), new("aside", UiText.Get("Aside · 브라우저 작업")), new("combo", UiText.Get("조합 · Codex·Claude·Aside 자동 선택")), new("ollama", UiText.Get("Ollama · 로컬 모델")) };
         providers.AddRange(ApiProviders.All.Select(x => new DeviceOption(x.Id, x.Name))); brain.ItemsSource = providers; brain.SelectedValue = settings.BrainProvider;
-        AddField(first, "생각하고 답할 AI", brain); first.Children.Add(Help("API 제공자의 키·모델과 로컬 서버 주소는 시작 후 설정에서 연결할 수 있어요."));
+        AddField(first, UiText.Get("생각하고 답할 AI"), brain); first.Children.Add(Help(UiText.Get("API 제공자의 키·모델과 로컬 서버 주소는 시작 후 설정에서 연결할 수 있어요.")));
         voice.ItemsSource = SpeechOutput.Options(false); voice.SelectedValue = settings.VoiceId;
-        AddField(first, "답변 목소리", voice); first.Children.Add(Button("이 목소리 들어보기", (_,_) => { try { VoicePreviewRequested?.Invoke(Draft()); } catch (Exception ex) { feedback.Text = ex.Message; } }));
-        AddField(second, "입력 마이크", microphone);
-        position.ItemsSource = new[] { new DeviceOption("center","가운데"), new DeviceOption("bottomCenter","아래 가운데"), new DeviceOption("bottomRight","오른쪽 아래"), new DeviceOption("bottomLeft","왼쪽 아래"), new DeviceOption("top","위 가운데") }; position.SelectedValue = settings.Desktop.OverlayPosition;
-        AddField(second, "알림 위치", position); second.Children.Add(Button("이 위치 미리 보기", (_,_) => PositionPreviewRequested?.Invoke(Draft().Desktop)));
+        AddField(first, UiText.Get("답변 목소리"), voice); first.Children.Add(Button(UiText.Get("이 목소리 들어보기"), (_,_) => { try { VoicePreviewRequested?.Invoke(Draft()); } catch (Exception ex) { feedback.Text = ex.Message; } }));
+        AddField(second, UiText.Get("입력 마이크"), microphone);
+        position.ItemsSource = new[] { new DeviceOption("center",UiText.Get("가운데")), new DeviceOption("bottomCenter",UiText.Get("아래 가운데")), new DeviceOption("bottomRight",UiText.Get("오른쪽 아래")), new DeviceOption("bottomLeft",UiText.Get("왼쪽 아래")), new DeviceOption("top",UiText.Get("위 가운데")) }; position.SelectedValue = settings.Desktop.OverlayPosition;
+        AddField(second, UiText.Get("알림 위치"), position); second.Children.Add(Button(UiText.Get("이 위치 미리 보기"), (_,_) => PositionPreviewRequested?.Invoke(Draft().Desktop)));
         checks.TextWrapping = TextWrapping.Wrap; checks.LineHeight = 23; checks.Margin = new Thickness(0,18,0,14); second.Children.Add(checks);
-        var row = new WrapPanel(); row.Children.Add(Button("다시 검사", async (_,_) => await Refresh())); row.Children.Add(Button("Windows 마이크 설정", (_,_) => Open("ms-settings:privacy-microphone"))); row.Children.Add(Button("설치 폴더 열기", (_,_) => Open(AppPaths.WindowsRoot))); second.Children.Add(row);
-        var modelButtons = new WrapPanel(); download = Button("한국어 모델 받기 / 복구", async (_,_) => await DownloadModel()); cancelDownload = Button("다운로드 중지", (_,_) => downloadStop?.Cancel()); cancelDownload.IsEnabled = false;
+        var row = new WrapPanel(); row.Children.Add(Button(UiText.Get("다시 검사"), async (_,_) => await Refresh())); row.Children.Add(Button(UiText.Get("Windows 마이크 설정"), (_,_) => Open("ms-settings:privacy-microphone"))); row.Children.Add(Button(UiText.Get("설치 폴더 열기"), (_,_) => Open(AppPaths.WindowsRoot))); second.Children.Add(row);
+        var modelButtons = new WrapPanel(); download = Button(UiText.Get("한국어 모델 받기 / 복구"), async (_,_) => await DownloadModel()); cancelDownload = Button(UiText.Get("다운로드 중지"), (_,_) => downloadStop?.Cancel()); cancelDownload.IsEnabled = false;
         modelButtons.Children.Add(download); modelButtons.Children.Add(cancelDownload); second.Children.Add(modelButtons); second.Children.Add(downloadProgress); second.Children.Add(downloadStatus);
-        second.Children.Add(Help("한국어 모델은 원본 제공자 k2-fsa에서 약 133 MB를 받습니다. 진행 중 취소할 수 있고 기존 모델은 검증 완료까지 유지합니다. 실행 환경이 없으면 Windows 설치 프로그램을 다시 실행하세요. 마이크는 ‘듣기 시작’ 전까지 녹음하지 않습니다."));
+        second.Children.Add(Help(UiText.Get("한국어 모델은 원본 제공자 k2-fsa에서 약 133 MB를 받습니다. 진행 중 취소할 수 있고 기존 모델은 검증 완료까지 유지합니다. 실행 환경이 없으면 Windows 설치 프로그램을 다시 실행하세요. 마이크는 ‘듣기 시작’ 전까지 녹음하지 않습니다.")));
         Page(false); Loaded += async (_,_) => await Refresh(); Closed += (_,_) => { closed = true; downloadStop?.Cancel(); };
     }
     static TextBox Field(string label) { var input = new TextBox { Style = (Style)Application.Current.FindResource("Field") }; AutomationProperties.SetName(input, label); return input; }
@@ -88,7 +88,7 @@ public sealed class SetupWindow : Window
     }
     static TextBlock Help(string text) => new() { Text = text, Foreground = Brushes.SlateGray, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,8,0,14), LineHeight = 20 };
     static void AddField(StackPanel panel, string label, UIElement input) { panel.Children.Add(new TextBlock { Text = label, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0,0,0,7) }); panel.Children.Add(input); panel.Children.Add(new Border { Height = 17 }); }
-    void Page(bool showSecond) { pageTwo = showSecond; first.Visibility = showSecond ? Visibility.Collapsed : Visibility.Visible; second.Visibility = showSecond ? Visibility.Visible : Visibility.Collapsed; heading.Text = showSecond ? "2. 이 PC에서 준비하기" : "1. 서로 어떻게 부를까요?"; back.Visibility = showSecond ? Visibility.Visible : Visibility.Collapsed; next.Content = showSecond ? "저장하고 시작" : "다음"; feedback.Text = ""; }
+    void Page(bool showSecond) { pageTwo = showSecond; first.Visibility = showSecond ? Visibility.Collapsed : Visibility.Visible; second.Visibility = showSecond ? Visibility.Visible : Visibility.Collapsed; heading.Text = showSecond ? UiText.Get("2. 이 PC에서 준비하기") : UiText.Get("1. 서로 어떻게 부를까요?"); back.Visibility = showSecond ? Visibility.Visible : Visibility.Collapsed; next.Content = showSecond ? UiText.Get("저장하고 시작") : UiText.Get("다음"); feedback.Text = ""; }
     UiSettings Draft()
     {
         var id = (brain.SelectedItem as DeviceOption)?.Id ?? original.BrainProvider;
@@ -107,17 +107,17 @@ public sealed class SetupWindow : Window
     {
         if (downloadStop != null) return;
         SpeechSetupStarted?.Invoke(); var own = new CancellationTokenSource(); downloadStop = own;
-        download.IsEnabled = next.IsEnabled = back.IsEnabled = false; cancelDownload.IsEnabled = true; downloadProgress.Visibility = Visibility.Visible; downloadStatus.Text = "다운로드를 준비하고 있어요…";
+        download.IsEnabled = next.IsEnabled = back.IsEnabled = false; cancelDownload.IsEnabled = true; downloadProgress.Visibility = Visibility.Visible; downloadStatus.Text = UiText.Get("다운로드를 준비하고 있어요…");
         var lastUpdate = DateTime.MinValue;
         var progress = new Progress<ModelProgress>(value => { if (closed || downloadStop != own) return; if ((DateTime.Now - lastUpdate).TotalMilliseconds < 150 && value.Percent < 100) return; lastUpdate = DateTime.Now; downloadProgress.Value = value.Percent; downloadStatus.Text = $"{value.Stage} · {value.Percent:0}% ({value.Downloaded / 1_000_000.0:0.0}/{value.Total / 1_000_000.0:0.0} MB)"; });
-        try { await ModelDownload.InstallAsync(progress, own.Token); if (!closed) { downloadStatus.Text = "한국어 모델을 검증하고 설치했어요. 듣기 시작으로 확인하세요."; await Refresh(); } }
-        catch (OperationCanceledException) { if (!closed) downloadStatus.Text = own.IsCancellationRequested ? "다운로드를 취소했어요. 기존 모델을 유지합니다." : "다운로드 시간이 초과됐어요. 다시 시도하세요."; }
-        catch (Exception ex) { if (!closed) downloadStatus.Text = "모델을 설치하지 못했어요. " + ex.Message; }
+        try { await ModelDownload.InstallAsync(progress, own.Token); if (!closed) { downloadStatus.Text = UiText.Get("한국어 모델을 검증하고 설치했어요. 듣기 시작으로 확인하세요."); await Refresh(); } }
+        catch (OperationCanceledException) { if (!closed) downloadStatus.Text = own.IsCancellationRequested ? UiText.Get("다운로드를 취소했어요. 기존 모델을 유지합니다.") : UiText.Get("다운로드 시간이 초과됐어요. 다시 시도하세요."); }
+        catch (Exception ex) { if (!closed) downloadStatus.Text = UiText.Get("모델을 설치하지 못했어요. ") + ex.Message; }
         finally { if (!closed) { download.IsEnabled = next.IsEnabled = back.IsEnabled = true; cancelDownload.IsEnabled = false; } downloadStop = null; own.Dispose(); }
     }
     async Task Refresh()
     {
-        if (refreshing) return; refreshing = true; checks.Text = "이 PC의 준비 상태를 확인하고 있어요…";
+        if (refreshing) return; refreshing = true; checks.Text = UiText.Get("이 PC의 준비 상태를 확인하고 있어요…");
         var rows = new List<string>();
         try
         {

@@ -327,12 +327,12 @@ public partial class App
         {
             var run = new McpAgentRun(Approve, Execute, Starting, Observed);
             await using var session = new McpSession((action, cancellation) => Dispatcher.InvokeAsync(() => run.DispatchAsync(action, cancellation)).Task.Unwrap(), token);
-            window.SetStatus("생각하는 중", Brain.NameFor(requestSettings.BrainProvider) + "와 작업을 진행하고 있어요.", listening, true);
+            window.SetStatus("생각하는 중", UiText.Copy("{0}와 작업을 진행하고 있어요.",Brain.NameFor(requestSettings.BrainProvider)), listening, true);
             var answer = await brain.AskAsync(text, screen, requestSettings, token, personal.MemoryContext + "\n" + webSearch.Context, mcp: session.Endpoint);
             token.ThrowIfCancellationRequested(); return run.Finish(answer);
         }
         var apiRun = new McpAgentRun(Approve, Execute, Starting, Observed);
-        window.SetStatus("생각하는 중", Brain.NameFor(requestSettings.BrainProvider) + "와 작업을 진행하고 있어요.", listening, true);
+        window.SetStatus("생각하는 중", UiText.Copy("{0}와 작업을 진행하고 있어요.",Brain.NameFor(requestSettings.BrainProvider)), listening, true);
         var apiAnswer = await brain.AskAsync(text, screen, requestSettings, token, personal.MemoryContext + "\n" + webSearch.Context,
             directTools: (action, cancellation) => Dispatcher.InvokeAsync(() => apiRun.DispatchAsync(action, cancellation)).Task.Unwrap());
         token.ThrowIfCancellationRequested(); return apiRun.Finish(apiAnswer);

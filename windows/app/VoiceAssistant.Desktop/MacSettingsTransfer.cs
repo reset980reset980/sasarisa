@@ -67,7 +67,7 @@ public static class MacSettingsTransfer
             }
             Flag("polishDictation", v => next.Text.PolishDictation = v);
             if (next.Text.PolishDictation && Any("polishDictation")) notes.Add("받아쓰기 다듬기는 Apple Intelligence 대신 Windows에서 선택한 AI 연결을 사용합니다.");
-            if (next.Language != "ko" && Any("language")) notes.Add("대화 언어를 가져왔습니다. 다국어 음성 입력에는 Windows의 로컬 Whisper 엔진 또는 호환 서버가 필요하며, 화면 메뉴는 한국어로 표시됩니다.");
+            if (next.Language != "ko" && Any("language")) notes.Add("대화 언어를 가져왔습니다. 다국어 음성 입력에는 Windows의 로컬 Whisper 엔진 또는 호환 서버가 필요하며, 한국어 이외 언어의 화면 메뉴는 영어로 표시됩니다.");
             if (Any("learnedWakes"))
             {
                 var value = root.GetProperty("learnedWakes"); if (value.ValueKind != JsonValueKind.Object) throw Invalid("learnedWakes");

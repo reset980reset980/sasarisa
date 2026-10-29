@@ -30,15 +30,15 @@ public partial class MainWindow
             var draft = _loadedSettings with { Text = ReadTextPreferences() };
             if (string.IsNullOrWhiteSpace(DictationSampleInput.Text)) throw new ArgumentException("시험할 받아쓰기 문장을 입력하세요.");
             DictationPreviewFeedback.Foreground = Brushes.SlateGray;
-            DictationPreviewFeedback.Text = draft.Text.PolishDictation ? "저장된 " + Brain.NameFor(draft.BrainProvider) + " 연결로 다듬고 있어요…" : "말버릇을 정리하고 있어요…";
+            DictationPreviewFeedback.Text = draft.Text.PolishDictation ? UiText.Get("저장된 ") + Brain.NameFor(draft.BrainProvider) + UiText.Get(" 연결로 다듬고 있어요…") : UiText.Get("말버릇을 정리하고 있어요…");
             DictationCancelButton.IsEnabled = true;
             var edit = await DictationProcessor.PrepareAsync(DictationSampleInput.Text, draft, own.Token);
             var result = edit.Result;
             if (textPreview != own) return;
             DictationResultInput.Text = edit.Utterance.Control == DictationControl.Text ? result.Text : edit.Description;
-            DictationPreviewFeedback.Text = (edit.Utterance.Control != DictationControl.Text || edit.Utterance.EnterAfter ? edit.Description + " " : result.Notice ?? (result.Polished ? "AI로 다듬었어요. 원문과 비교하세요." : "말버릇 설정을 적용했어요.")) + " 다른 앱에 입력하지 않았습니다.";
+            DictationPreviewFeedback.Text = (edit.Utterance.Control != DictationControl.Text || edit.Utterance.EnterAfter ? edit.Description + " " : result.Notice ?? (result.Polished ? UiText.Get("AI로 다듬었어요. 원문과 비교하세요.") : UiText.Get("말버릇 설정을 적용했어요."))) + UiText.Get(" 다른 앱에 입력하지 않았습니다.");
         }
-        catch (OperationCanceledException) { if (textPreview == own) DictationPreviewFeedback.Text = "다듬기 시험을 취소했어요."; }
+        catch (OperationCanceledException) { if (textPreview == own) DictationPreviewFeedback.Text = UiText.Get("다듬기 시험을 취소했어요."); }
         catch (Exception ex) { if (textPreview == own) { DictationPreviewFeedback.Text = ex.Message; DictationPreviewFeedback.Foreground = Brushes.Firebrick; } }
         finally { if (textPreview == own) { textPreview = null; DictationCancelButton.IsEnabled = false; } own.Dispose(); }
     }

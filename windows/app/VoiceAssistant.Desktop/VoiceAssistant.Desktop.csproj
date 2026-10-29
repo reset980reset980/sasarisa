@@ -19,6 +19,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <EmbeddedResource Include="PhoneWeb\*" />
     <EmbeddedResource Include="WhisperRuntimeFiles.json" />
+    <EmbeddedResource Include="Localization\Ui.en.json" LogicalName="VoiceAssistant.Ui.en.json" WithCulture="false" />
+    <EmbeddedResource Include="Localization\Ui.dynamic.en.json" LogicalName="VoiceAssistant.Ui.dynamic.en.json" WithCulture="false" />
+    <EmbeddedResource Include="Localization\Ui.dialogs.en.json" LogicalName="VoiceAssistant.Ui.dialogs.en.json" WithCulture="false" />
     <None Update="Whisper-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="NAudio-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="ModelContextProtocol-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

@@ -41,7 +41,15 @@ public partial class App : System.Windows.Application
     {
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         base.OnStartup(e); AppPaths.Initialize(); ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        try { UiText.Ensure(); }
+        catch (Exception ex)
+        {
+            AppPaths.Log("ui-initialization",ex.ToString());
+            if (e.Args.Contains("--self-test")) File.WriteAllText(Path.Combine(AppPaths.Home,"ui-initialization-error.txt"),ex.ToString());
+            Shutdown(2); return;
+        }
         hands.EditHistory = actionHistory;
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--ui-language-app-only")) { Shutdown(UiLanguageAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--ai-usage-app-only")) { Shutdown(await AiUsageAppChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--personal-data-app-only")) { Shutdown(PersonalDataAppChecks.Run()); return; }
@@ -124,7 +132,13 @@ public partial class App : System.Windows.Application
             UpdateHotkeyDisplay();
         };
         tray = new Forms.NotifyIcon { Text = settings.Name + " · Windows", Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application, Visible = true };
-        var menu = new Forms.ContextMenuStrip(); menu.Items.Add("창 열기", null, (_, _) => Dispatcher.Invoke(window.ShowApp)); menu.Items.Add("말하기", null, (_, _) => Dispatcher.Invoke(Wake)); menu.Items.Add("듣기 시작 / 중지", null, (_, _) => Dispatcher.Invoke(ToggleListening)); menu.Items.Add("처음 설정", null, (_, _) => Dispatcher.Invoke(() => { window.ShowApp(); ShowSetup(); })); menu.Items.Add("종료", null, (_, _) => Dispatcher.Invoke(Quit)); tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => Dispatcher.Invoke(window.ShowApp);
+        var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add(UiText.MenuItem("창 열기", (_, _) => Dispatcher.Invoke(window.ShowApp)));
+        menu.Items.Add(UiText.MenuItem("말하기", (_, _) => Dispatcher.Invoke(Wake)));
+        menu.Items.Add(UiText.MenuItem("듣기 시작 / 중지", (_, _) => Dispatcher.Invoke(ToggleListening)));
+        menu.Items.Add(UiText.MenuItem("처음 설정", (_, _) => Dispatcher.Invoke(() => { window.ShowApp(); ShowSetup(); })));
+        menu.Items.Add(UiText.MenuItem("종료", (_, _) => Dispatcher.Invoke(Quit)));
+        tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => Dispatcher.Invoke(window.ShowApp);
         StartMicrophoneMonitor();
         tick = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) }; tick.Tick += (_, _) => Tick(); tick.Start();
         window.Show(); window.SetBrainStatus(Brain.StatusFor(settings.BrainProvider)); RefreshStatus();
@@ -255,7 +269,7 @@ public partial class App : System.Windows.Application
     void EndHold()
     {
         holding=false;microphonePause.BeginManual(TimeSpan.FromSeconds(5));awakeUntil=DateTimeOffset.Now.AddSeconds(5);input.EndUtterance();
-        window.SetStatus("말씀을 확인하는 중","키를 놓으면 인식을 끝내고 명령을 처리해요.",listening,true);
+        window.SetStatus("말씀을 확인하는 중",UiText.Copy("키를 놓으면 인식을 끝내고 명령을 처리해요."),listening,true);
     }
     void StopTurn() => StopTurn(preserveExecutionOffer: false);
     void StopTurn(bool preserveExecutionOffer)
@@ -353,7 +367,7 @@ public partial class App : System.Windows.Application
             var dictationTarget = isDictation ? dictationInputTarget ?? hands.CaptureInputTarget() : null;
             if (voice && !string.IsNullOrWhiteSpace(wav) && WhisperEngine.Enabled(settings) && (isDictation || !WhisperText.Quick(parsed)))
             {
-                window.SetStatus("문장을 다듬어 듣는 중", "로컬 Whisper 서버에서 확인하고 있어요.", listening, true);
+                window.SetStatus("문장을 다듬어 듣는 중", UiText.Copy("로컬 Whisper 서버에서 확인하고 있어요."), listening, true);
                 try
                 {
                     var transcript = await WhisperEngine.Shared.RefineAsync(settings, wav, token);
@@ -400,7 +414,7 @@ public partial class App : System.Windows.Application
             if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", StopReply); return; }
             if (parsed == null)
             {
-                window.SetStatus("생각하는 중", Brain.NameFor(settings.BrainProvider)+"에 연결하고 있어요.", listening, true);
+                window.SetStatus("생각하는 중", UiText.Copy("{0}에 연결하고 있어요.",Brain.NameFor(settings.BrainProvider)), listening, true);
                 overlay.SetContent("생각하는 중", text, true); overlay.ShowOverlay();
                 var screen = ""; if (Regex.IsMatch(text, "화면|지금.*창|버튼|이거|이 글")) { try { screen = hands.ScreenContext(); } catch (Exception ex) { screen = "화면을 읽을 수 없음: " + ex.Message; } }
                 var run = await RunAiAsync(text, screen, token);
@@ -450,7 +464,7 @@ public partial class App : System.Windows.Application
                 else
                 {
                     if (RemoteExecution.Current != null) throw new AgentStoppedException("이 동작은 PC에서 확인해야 해요. 휴대폰에서는 실행하지 않았어요.");
-                    approved = MessageBox.Show(window, $"대상: {target}\n\n{details}\n\n실행할까요?", "실행 내용 확인", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+                    approved = MessageBox.Show(window, $"대상: {target}\n\n{details}\n\n실행할까요?", UiText.Get("실행 내용 확인"), MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
                     if (approved) foreach (var action in confirmations) confirmedEffects[action] = ExecutionConsent.Effect(action);
                 }
                 if (!approved) { window.AddMessage("assistant", "실행을 취소했어요."); return; }
@@ -692,24 +706,25 @@ public partial class App : System.Windows.Application
     void RefreshStatus()
     {
         if (closing) return;
-        if (starting) { window.SetStatus(microphoneRecoveryPending || automaticSpeechStart ? "마이크 다시 연결 중" : "마이크 준비 중", "한국어 모델을 불러오고 있어요. ‘듣기 중지’로 취소할 수 있어요.", true, true); return; }
-        if(speaking){window.SetStatus("답변을 읽는 중",CanListenForBarge ? (bargeIn.Any ? "말씀하시면 답변을 멈추고 들을게요." : "이름을 부르거나 ‘그만’이라고 말해 끼어들 수 있어요.") : "중지 버튼" + (hotkeys?.Stop is { } stop ? "이나 " + stop.Label : "") + "로 멈출 수 있어요.",listening,true);return;}
-        if (AwaitingSendPreview) { window.SetStatus("전송 전 확인", "20초 안에 네·아니로 답하거나 대화창의 보내기·취소를 선택하세요.", listening, true); return; }
-        if (busy) { window.SetStatus("처리 중", "중지하거나 새 명령을 입력할 수 있어요.", listening, true); return; }
+        if (starting) { window.SetStatus(microphoneRecoveryPending || automaticSpeechStart ? "마이크 다시 연결 중" : "마이크 준비 중", UiText.Copy("한국어 모델을 불러오고 있어요. ‘듣기 중지’로 취소할 수 있어요."), true, true); return; }
+        if(speaking){window.SetStatus("답변을 읽는 중",CanListenForBarge ? UiText.Copy(bargeIn.Any ? "말씀하시면 답변을 멈추고 들을게요." : "이름을 부르거나 ‘그만’이라고 말해 끼어들 수 있어요.") : UiText.Copy("중지 버튼{0}로 멈출 수 있어요.",hotkeys?.Stop is { } stop ? UiText.Copy("이나 {0}",stop.Label) : ""),listening,true);return;}
+        if (AwaitingSendPreview) { window.SetStatus("전송 전 확인", UiText.Copy("20초 안에 네·아니로 답하거나 대화창의 보내기·취소를 선택하세요."), listening, true); return; }
+        if (busy) { window.SetStatus("처리 중", UiText.Copy("중지하거나 새 명령을 입력할 수 있어요."), listening, true); return; }
         if (listening && microphonePause.Blocked) { window.SetStatus(microphonePause.Known ? "다른 앱 사용 중 · 자동 듣기 대기" : "자동 듣기 대기", microphonePause.Detail(HotkeyLabel), true, false, paused: true); return; }
-        if (dictating) { window.SetStatus("받아쓰는 중", "입력할 창을 선택하고 말하세요. ‘그만’으로 끝냅니다.", listening, true); return; }
-        if (!listening) { window.SetStatus("무엇을 도와드릴까요?", "아래에 명령을 입력하거나 ‘듣기 시작’을 누르세요.", false, false); return; }
-        if (ShouldCaptureSpeech() && speechCapturePending) { window.SetStatus("음성 인식 입력 확인 중", "마이크 신호와 별도로 인식 활성화 응답을 기다리고 있어요.", true, false); return; }
-        if (microphoneHealth.Quiet) { window.SetStatus("마이크에 소리가 거의 들어오지 않아요", "헤드셋의 음소거 버튼과 설정의 입력 장치를 확인하세요. 소리가 들어오면 안내가 사라집니다.", true, false, attention: true); return; }
-        if(settings.Activation=="hold"){window.SetStatus(holding?"키를 누른 동안 듣고 있어요":"눌러서 말하기 대기",HotkeyLabel+"를 누른 채 말하고, 다 말하면 키를 놓으세요.",true,false);return;}
-        window.SetStatus(awakeUntil > DateTimeOffset.Now ? "말씀하세요" : "호출을 기다리고 있어요", settings.Activation == "voice" ? $"{WakePhrases.Cue(settings)} 또는 {HotkeyLabel}로 부를 수 있어요." : $"{HotkeyLabel}로 부른 뒤 말씀하세요.", true, false);
+        if (dictating) { window.SetStatus("받아쓰는 중", UiText.Copy("입력할 창을 선택하고 말하세요. ‘그만’으로 끝냅니다."), listening, true); return; }
+        if (!listening) { window.SetStatus("무엇을 도와드릴까요?", UiText.Copy("아래에 명령을 입력하거나 ‘듣기 시작’을 누르세요."), false, false); return; }
+        if (ShouldCaptureSpeech() && speechCapturePending) { window.SetStatus("음성 인식 입력 확인 중", UiText.Copy("마이크 신호와 별도로 인식 활성화 응답을 기다리고 있어요."), true, false); return; }
+        if (microphoneHealth.Quiet) { window.SetStatus("마이크에 소리가 거의 들어오지 않아요", UiText.Copy("헤드셋의 음소거 버튼과 설정의 입력 장치를 확인하세요. 소리가 들어오면 안내가 사라집니다."), true, false, attention: true); return; }
+        if(settings.Activation=="hold"){window.SetStatus(holding?"키를 누른 동안 듣고 있어요":"눌러서 말하기 대기",UiText.Copy("{0}를 누른 채 말하고, 다 말하면 키를 놓으세요.",HotkeyUi),true,false);return;}
+        window.SetStatus(awakeUntil > DateTimeOffset.Now ? "말씀하세요" : "호출을 기다리고 있어요", settings.Activation == "voice" ? UiText.Copy("{0} 또는 {1}로 부를 수 있어요.",WakePhrases.Cue(settings),HotkeyUi) : UiText.Copy("{0}로 부른 뒤 말씀하세요.",HotkeyUi), true, false);
     }
     string HotkeyLabel => hotkey.Length > 0 ? hotkey : "‘지금 말하기’ 버튼";
+    object HotkeyUi => hotkey.Length > 0 ? hotkey : UiText.Copy("‘지금 말하기’ 버튼");
     async void Quit()
     {
         if (closing) return;
         closing = true; StopTurn(); tick?.Stop(); input.Dispose(); output.Dispose(); WhisperEngine.Shared.Dispose();
-        window.SetStatus("종료하는 중", "진행 중인 작업을 멈추고 있어요.", false, true); window.IsEnabled = false;
+        window.SetStatus("종료하는 중", UiText.Copy("진행 중인 작업을 멈추고 있어요."), false, true); window.IsEnabled = false;
         var stopGrow = StopGrowAsync();
         var stopPhone = StopPhoneAsync();
         await StopRemoteAsync();
@@ -719,5 +734,5 @@ public partial class App : System.Windows.Application
         if (!await brain.WaitForAsideStopAsync()) AppPaths.Log("aside-stop", "앱 종료 제한 시간 안에 Aside 작업 중지를 확인하지 못했어요.");
         videoWindow?.Close(); tray?.Dispose(); Native.UnregisterHotKey(handle, 1); Native.UnregisterHotKey(handle, 2); overlay.Close(); window.Close(); Shutdown();
     }
-    protected override void OnExit(ExitEventArgs e) { WhisperEngine.Shared.Dispose(); microphoneMonitor?.Dispose(); displayPower?.Dispose(); hotkeys?.Dispose(); foreach (var launch in ownedLaunches) launch.Dispose(); foreach (var owned in ownedWindows) owned.Dispose(); input.Dispose(); output.Dispose(); tray?.Dispose(); showWait?.Unregister(null); quitWait?.Unregister(null); showEvent?.Dispose(); quitEvent?.Dispose(); singleton?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e) { WhisperEngine.Shared.Dispose(); microphoneMonitor?.Dispose(); displayPower?.Dispose(); hotkeys?.Dispose(); foreach (var launch in ownedLaunches) launch.Dispose(); foreach (var owned in ownedWindows) owned.Dispose(); input.Dispose(); output.Dispose(); tray?.ContextMenuStrip?.Dispose(); tray?.Dispose(); showWait?.Unregister(null); quitWait?.Unregister(null); showEvent?.Dispose(); quitEvent?.Dispose(); singleton?.Dispose(); base.OnExit(e); }
 }

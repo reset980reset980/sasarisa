@@ -74,6 +74,8 @@ public partial class MainWindow : Window
     private string _activation = "voice";
     private UiSettings _loadedSettings = new();
     private string _stopHotkeyChord = "Ctrl+Alt+Backspace";
+    (string Title,string Detail,bool Listening,bool Busy,bool Paused,bool Attention)? _lastUiStatus;
+    UiPhrase? _statusDetailCopy;
 
     public event Action<string>? CommandSubmitted;
     public event Action? ListenToggled;
@@ -96,22 +98,30 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        UiText.Ensure();
         InitializeComponent();
         LanguageInput.ItemsSource = ConversationLanguage.All;
-        Closed += (_, _) => { _apiRequest?.Cancel(); _asideRequest?.Cancel(); };
+        UiText.LanguageChanged += RefreshUiText;
+        Closed += (_, _) => { UiText.LanguageChanged -= RefreshUiText; _apiRequest?.Cancel(); _asideRequest?.Cancel(); };
         CommandInput.TextChanged += (_, _) => InputPlaceholder.Visibility =
             string.IsNullOrEmpty(CommandInput.Text) ? Visibility.Visible : Visibility.Collapsed;
         RefreshRegisteredApps();
     }
 
-    public void SetStatus(string title, string detail, bool listening, bool busy, bool paused = false, bool attention = false) => OnUi(() =>
+    public void SetStatus(string title, string detail, bool listening, bool busy, bool paused = false, bool attention = false)
+        => SetStatusCore(title,detail,null,listening,busy,paused,attention);
+    public void SetStatus(string title, UiPhrase detail, bool listening, bool busy, bool paused = false, bool attention = false)
+        => SetStatusCore(title,detail.Render(),detail,listening,busy,paused,attention);
+    void SetStatusCore(string title,string detail,UiPhrase? copy,bool listening,bool busy,bool paused,bool attention) => OnUi(() =>
     {
-        StatusTitle.Text = title;
+        _lastUiStatus = (title,detail,listening,busy,paused,attention);
+        _statusDetailCopy = copy;
+        StatusTitle.Text = UiText.Get(title);
         StatusDetail.Text = detail;
-        StatusPill.Text = busy ? "처리 중" : paused ? "자동 듣기 대기" : attention ? "입력 확인" : listening ? "듣는 중" : "마이크 꺼짐";
+        StatusPill.Text = UiText.Get(busy ? "처리 중" : paused ? "자동 듣기 대기" : attention ? "입력 확인" : listening ? "듣는 중" : "마이크 꺼짐");
         StatusDot.Fill = busy || attention ? new SolidColorBrush(Color.FromRgb(221, 157, 50)) :
             listening ? new SolidColorBrush(Color.FromRgb(47, 156, 122)) : Muted;
-        ListenButton.Content = listening ? "듣기 중지" : "듣기 시작";
+        ListenButton.Content = UiText.Get(listening ? "듣기 중지" : "듣기 시작");
         ListenButton.Background = listening ? new SolidColorBrush(Color.FromRgb(40, 65, 90)) : Accent;
         ListenButton.BorderBrush = ListenButton.Background;
         StopButton.IsEnabled = listening || busy;
@@ -138,8 +148,8 @@ public partial class MainWindow : Window
         var header = new Grid { Margin = new Thickness(0, 0, 0, 8) };
         header.Children.Add(new TextBlock
         {
-            Text = isUser ? (RemoteExecution.Current != null ? "휴대폰" : "나") : isError ? "확인이 필요해요" : isSystem ? "안내" : _assistantName,
-            Tag = !isUser && !isError && !isSystem ? "assistant-role" : null,
+            Text = isUser ? UiText.Get(RemoteExecution.Current != null ? "휴대폰" : "나") : isError ? UiText.Get("확인이 필요해요") : isSystem ? UiText.Get("안내") : _assistantName,
+            Tag = isUser ? (RemoteExecution.Current != null ? "ui-role-phone" : "ui-role-user") : isError ? "ui-role-error" : isSystem ? "ui-role-system" : "assistant-role",
             FontSize = 10,
             FontWeight = FontWeights.SemiBold,
             Foreground = isUser ? Accent : isError ? Brushes.Firebrick : Muted
@@ -208,6 +218,7 @@ public partial class MainWindow : Window
 
     public void LoadSettings(UiSettings settings) => OnUi(() =>
     {
+        UiText.Apply(settings.Language);
         _loadedSettings = settings with { };
         LoadTextPreferences(settings.Text);
         _activation = settings.Activation;
@@ -293,7 +304,7 @@ public partial class MainWindow : Window
         ChatPage.Visibility = page == "chat" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = page == "settings" ? Visibility.Visible : Visibility.Collapsed;
         HelpPage.Visibility = page == "help" ? Visibility.Visible : Visibility.Collapsed;
-        PageTitle.Text = page switch { "settings" => "나에게 맞는 " + _assistantName, "help" => "일상을 조금 더 가볍게", _ => "무엇을 도와드릴까요?" };
+        PageTitle.Text = page switch { "settings" => UiText.Format("나에게 맞는 {0}",_assistantName), "help" => UiText.Get("일상을 조금 더 가볍게"), _ => UiText.Get("무엇을 도와드릴까요?") };
         foreach (var item in new[] { (ChatNav, "chat"), (SettingsNav, "settings"), (HelpNav, "help") })
         {
             item.Item1.Background = page == item.Item2 ? new SolidColorBrush(Color.FromRgb(43, 58, 85)) : Brushes.Transparent;
@@ -307,7 +318,7 @@ public partial class MainWindow : Window
         Title = _assistantName + " · Windows";
         BrandNameText.Text = _assistantName;
         UpdateHotkeyHints();
-        if (_page == "settings") PageTitle.Text = "나에게 맞는 " + _assistantName;
+        if (_page == "settings") PageTitle.Text = UiText.Format("나에게 맞는 {0}",_assistantName);
         foreach (var child in HistoryPanel.Children)
             if (child is Border { Child: StackPanel panel } && panel.Children.Count > 0 && panel.Children[0] is Grid header)
                 foreach (var part in header.Children)
@@ -317,19 +328,18 @@ public partial class MainWindow : Window
     private void UpdateHotkeyHints()
     {
         bool available = !string.IsNullOrWhiteSpace(_hotkeyChord);
-        HotkeyHintText.Text = available ? _hotkeyChord : "단축키 사용 불가";
-        SettingsHotkeyHelp.Text = available ? _hotkeyChord + "로 바로 말하기" : "화면의 지금 말하기 버튼을 사용하세요.";
-        HelpStartText.Text = "듣기 시작을 누른 뒤 ‘" + _assistantName + "’라고 부르거나, " +
-            (available ? _hotkeyChord : "지금 말하기 버튼") + "을 누르고 말하세요. 텍스트로 입력해도 같은 명령을 사용할 수 있어요.";
-        WakeButton.ToolTip = available ? "호출 이름 없이 바로 듣습니다. 단축키: " + _hotkeyChord : "호출 이름을 기다리지 않고 바로 듣습니다.";
-        StopButton.ToolTip = string.IsNullOrEmpty(_stopHotkeyChord) ? "진행 중인 요청과 답변을 멈춥니다." : "진행 중인 요청과 답변을 멈춥니다. " + _stopHotkeyChord;
-        StopHelpText.Text = "처리·음성 출력 중에는 중지 버튼" + (string.IsNullOrEmpty(_stopHotkeyChord) ? "" : " 또는 " + _stopHotkeyChord) + "으로 멈춥니다. ‘그만’ 음성 명령은 듣는 중에 사용할 수 있습니다.";
-        WakeButton.Content = _activation=="hold"?"눌러서 말하기 안내":"지금 말하기";
+        HotkeyHintText.Text = available ? _hotkeyChord : UiText.Get("단축키 사용 불가");
+        SettingsHotkeyHelp.Text = available ? UiText.Format("{0}로 바로 말하기",_hotkeyChord) : UiText.Get("화면의 지금 말하기 버튼을 사용하세요.");
+        HelpStartText.Text = UiText.Format("듣기 시작을 누른 뒤 ‘{0}’라고 부르거나, {1}을 누르고 말하세요. 텍스트로 입력해도 같은 명령을 사용할 수 있어요.",_assistantName,available ? _hotkeyChord : UiText.Get("지금 말하기 버튼"));
+        WakeButton.ToolTip = available ? UiText.Format("호출 이름 없이 바로 듣습니다. 단축키: {0}",_hotkeyChord) : UiText.Get("호출 이름을 기다리지 않고 바로 듣습니다.");
+        StopButton.ToolTip = string.IsNullOrEmpty(_stopHotkeyChord) ? UiText.Get("진행 중인 요청과 답변을 멈춥니다.") : UiText.Format("진행 중인 요청과 답변을 멈춥니다. {0}",_stopHotkeyChord);
+        StopHelpText.Text = UiText.Format("처리·음성 출력 중에는 중지 버튼{0}으로 멈춥니다. ‘그만’ 음성 명령은 듣는 중에 사용할 수 있습니다.",string.IsNullOrEmpty(_stopHotkeyChord) ? "" : UiText.Format(" 또는 {0}",_stopHotkeyChord));
+        WakeButton.Content = UiText.Get(_activation=="hold"?"눌러서 말하기 안내":"지금 말하기");
         if(_activation=="hold")
         {
-            SettingsHotkeyHelp.Text=available?_hotkeyChord+"를 누른 채 말하고 키를 놓으면 처리합니다.":"다른 호출 방식을 선택하세요. 단축키를 사용할 수 없습니다.";
+            SettingsHotkeyHelp.Text=available?UiText.Format("{0}를 누른 채 말하고 키를 놓으면 처리합니다.",_hotkeyChord):UiText.Get("다른 호출 방식을 선택하세요. 단축키를 사용할 수 없습니다.");
             WakeButton.ToolTip=SettingsHotkeyHelp.Text;
-            HelpStartText.Text="듣기 시작 후 "+SettingsHotkeyHelp.Text+" 한 번에 최대 30초까지 말할 수 있어요. 연속 받아쓰기는 다른 호출 방식에서 사용하세요.";
+            HelpStartText.Text=UiText.Format("듣기 시작 후 {0} 한 번에 최대 30초까지 말할 수 있어요. 연속 받아쓰기는 다른 호출 방식에서 사용하세요.",SettingsHotkeyHelp.Text);
         }
     }
 
@@ -343,7 +353,7 @@ public partial class MainWindow : Window
     private static void SetSpeechOptions(ComboBox combo,IReadOnlyList<DeviceOption> options,string selected)
     {
         var values=new List<DeviceOption>(options);
-        if(!values.Exists(x=>x.Id==selected))values.Add(new(selected,"이전에 선택한 장치/음성 · 현재 없음"));
+        if(!values.Exists(x=>x.Id==selected))values.Add(new(selected,UiText.Get("이전에 선택한 장치/음성 · 현재 없음")));
         combo.ItemsSource=values;combo.SelectedValue=selected;
     }
     private UiSettings? ReadSpeechOptions()
@@ -361,7 +371,7 @@ public partial class MainWindow : Window
         var name = NameInput.Text.Trim();
         if (string.IsNullOrWhiteSpace(name) || name.Length > 20 || System.Linq.Enumerable.Any(name, char.IsControl)) { SettingsError("호출 이름은 1~20자로 입력하세요.", NameInput); return; }
         if (DeviceInput.SelectedItem is DeviceOption { Unavailable: true }) { SettingsError("입력 마이크를 연결하거나 다른 마이크를 선택하세요.", DeviceInput); return; }
-        NameTrainingRequested?.Invoke(name, DeviceInput.SelectedItem as DeviceOption ?? new(_selectedDevice, "현재 입력 마이크"));
+        NameTrainingRequested?.Invoke(name, DeviceInput.SelectedItem as DeviceOption ?? new(_selectedDevice, UiText.Get("현재 입력 마이크")));
     }
     private void SendButton_Click(object sender, RoutedEventArgs e) => SubmitCommand();
 
@@ -370,7 +380,7 @@ public partial class MainWindow : Window
         string current = ProjectDirectoryInput.Text.Trim();
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "코딩 도우미가 작업할 프로젝트 폴더 선택",
+            Title = UiText.Get("코딩 도우미가 작업할 프로젝트 폴더 선택"),
             Multiselect = false,
             InitialDirectory = Directory.Exists(current) ? current : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
         };
@@ -465,13 +475,14 @@ public partial class MainWindow : Window
             Desktop = desktop, Text = textPreferences
         };
         var error = SettingsSaved?.Invoke(settings);
-        SettingsFeedback.Text = error ?? "설정을 저장했어요. 다음 명령부터 적용됩니다.";
+        if (error == null) UiText.Apply(settings.Language);
+        SettingsFeedback.Text = UiText.Get(error ?? "설정을 저장했어요. 다음 명령부터 적용됩니다.");
         SettingsFeedback.Foreground = error == null ? new SolidColorBrush(Color.FromRgb(32, 121, 92)) : Brushes.Firebrick;
     }
 
     private void SettingsError(string message, Control field)
     {
-        SettingsFeedback.Text = message;
+        SettingsFeedback.Text = UiText.Get(message);
         SettingsFeedback.Foreground = Brushes.Firebrick;
         field.BringIntoView();
         field.Focus();

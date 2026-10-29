@@ -15,6 +15,7 @@ public partial class OverlayWindow : Window
     private bool _positioned;
     private bool _dragged;
     private bool _idle;
+    private bool _uiBusy;
     private bool _dismissed;
     private DesktopPreferences _preferences = new();
     private readonly bool _allowPresentation;
@@ -25,7 +26,10 @@ public partial class OverlayWindow : Window
     public OverlayWindow(bool allowPresentation = true)
     {
         _allowPresentation = allowPresentation;
+        UiText.Ensure();
         InitializeComponent();
+        UiText.LanguageChanged += RefreshLocalizedChrome;
+        Closed += (_,_) => UiText.LanguageChanged -= RefreshLocalizedChrome;
         SourceInitialized += (_, _) =>
         {
             IntPtr handle = new WindowInteropHelper(this).Handle;
@@ -38,9 +42,10 @@ public partial class OverlayWindow : Window
     {
         UpdateAssistantLabel();
         SetIdle(false);
+        _uiBusy = busy;
         OverlayTitle.Text = title;
         OverlayText.Text = text;
-        OverlayState.Text = busy ? "작업을 처리하고 있어요" : "음성을 기다리고 있어요";
+        OverlayState.Text = UiText.Get(busy ? "작업을 처리하고 있어요" : "음성을 기다리고 있어요");
         OverlayDot.Fill = new SolidColorBrush(busy ? Color.FromRgb(244, 189, 94) : Color.FromRgb(112, 209, 178));
     });
 
@@ -77,8 +82,13 @@ public partial class OverlayWindow : Window
     {
         if (Application.Current?.MainWindow is not MainWindow window) return;
         OverlayBrand.Text = window.Title;
-        Title = window.Title + " · 알림";
+        Title = UiText.Format("{0} · 알림",window.Title);
     }
+    void RefreshLocalizedChrome() => OnUi(() =>
+    {
+        UpdateAssistantLabel();
+        OverlayState.Text = UiText.Get(_uiBusy ? "작업을 처리하고 있어요" : "음성을 기다리고 있어요");
+    });
 
     private void PositionAtCorner()
     {

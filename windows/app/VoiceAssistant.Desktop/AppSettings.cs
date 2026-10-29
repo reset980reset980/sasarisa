@@ -14,7 +14,7 @@ public partial class MainWindow
         RegisteredAppsInput.ItemsSource = AppRegistry.Default.Items;
         RegisteredAppsInput.SelectedValue = selectedId;
         RefreshGreetingApps();
-        AppRegistrationFeedback.Text = AppRegistry.Default.Error ?? "등록한 이름에 ‘열어’를 붙여 말하세요. 예: ‘작업 노트 열어’.";
+        AppRegistrationFeedback.Text = AppRegistry.Default.Error ?? UiText.Get("등록한 이름에 ‘열어’를 붙여 말하세요. 예: ‘작업 노트 열어’.");
     }
     void RegisteredAppsInput_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -28,7 +28,7 @@ public partial class MainWindow
     }
     void ChooseRegisteredApp_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "등록할 앱의 실행 파일 또는 바로가기 선택", Filter = "앱과 바로가기|*.exe;*.lnk", CheckFileExists = true, Multiselect = false, DereferenceLinks = false };
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = UiText.Get("등록할 앱의 실행 파일 또는 바로가기 선택"), Filter = "앱과 바로가기|*.exe;*.lnk", CheckFileExists = true, Multiselect = false, DereferenceLinks = false };
         if (dialog.ShowDialog(this) == true) AppPathInput.Text = dialog.FileName;
     }
     void SaveRegisteredApp_Click(object sender, RoutedEventArgs e)
@@ -45,7 +45,7 @@ public partial class MainWindow
         if (RegisteredAppsInput.SelectedItem is not RegisteredApp app) return;
         try
         {
-            AppRegistry.Default.Remove(app.Id); RefreshRegisteredApps(); AppRegistrationFeedback.Text = "목록에서 제거했어요. 앱 파일은 그대로 있어요."; AppRegistrationFeedback.Foreground = Brushes.DarkGreen;
+            AppRegistry.Default.Remove(app.Id); RefreshRegisteredApps(); AppRegistrationFeedback.Text = UiText.Get("목록에서 제거했어요. 앱 파일은 그대로 있어요."); AppRegistrationFeedback.Foreground = Brushes.DarkGreen;
         }
         catch (Exception ex) { AppRegistrationFeedback.Text = ex.Message; AppRegistrationFeedback.Foreground = Brushes.Firebrick; }
     }

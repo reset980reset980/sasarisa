@@ -35,7 +35,7 @@ public sealed class GreetingWindow : Window
     public GreetingWindow(UiSettings settings)
     {
         var targetScreen = ScreenFor(settings.Desktop.OverlayScreen);
-        Title = settings.Name + " · 인사"; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Topmost = true;
+        Title = settings.Name + UiText.Get(" · 인사"); WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false; Topmost = true;
         Background = new SolidColorBrush(Color.FromRgb(7, 17, 35)); Width = 960; Height = 680; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new Grid { Margin = new Thickness(32) }; Content = root;
         var center = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 900 };
@@ -57,7 +57,7 @@ public sealed class GreetingWindow : Window
         center.Children.Add(new TextBlock { Text = Greetings.Title(settings), FontSize = 46, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap });
         center.Children.Add(new TextBlock { Text = Greetings.Subtitle(settings), FontSize = 16, Foreground = new SolidColorBrush(Color.FromRgb(142, 168, 207)), HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 12, 0, 26), TextWrapping = TextWrapping.Wrap });
         center.Children.Add(new TextBlock { Text = Greetings.Reply(settings), FontSize = 25, Foreground = new SolidColorBrush(Color.FromRgb(221, 233, 254)), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxHeight = 180 }); root.Children.Add(center);
-        var dismiss = new Button { Content = "계속하기 · Esc", Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(35, 57, 91)), BorderThickness = new Thickness(0), Padding = new Thickness(22, 10, 22, 10), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom };
+        var dismiss = new Button { Content = UiText.Get("계속하기 · Esc"), Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(35, 57, 91)), BorderThickness = new Thickness(0), Padding = new Thickness(22, 10, 22, 10), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom };
         dismiss.Click += (_, _) => Dismiss(); root.Children.Add(dismiss);
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Dismiss(); } };
         Loaded += (_, _) =>

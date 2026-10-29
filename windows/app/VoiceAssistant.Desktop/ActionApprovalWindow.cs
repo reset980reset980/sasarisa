@@ -10,18 +10,18 @@ namespace VoiceAssistant.Desktop;
 
 internal sealed class ActionApprovalWindow : Window
 {
-    internal ActionApprovalWindow(Window owner, string description, VisualPreview? preview = null)
+    internal ActionApprovalWindow(Window? owner, string description, VisualPreview? preview = null)
     {
-        Owner = owner; Title = "실행 내용 확인"; Width = 620; Height = preview == null ? 440 : 680;
+        Owner = owner; Title = UiText.Get("실행 내용 확인"); Width = 620; Height = preview == null ? 440 : 680;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false;
         var layout = new DockPanel { Margin = new Thickness(20) };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        var no = new Button { Content = "취소", IsCancel = true, MinWidth = 90, Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(0, 0, 10, 0) };
-        var yes = new Button { Content = "실행", MinWidth = 90, Padding = new Thickness(12, 7, 12, 7) };
+        var no = new Button { Content = UiText.Get("취소"), IsCancel = true, MinWidth = 90, Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(0, 0, 10, 0) };
+        var yes = new Button { Content = UiText.Get("실행"), MinWidth = 90, Padding = new Thickness(12, 7, 12, 7) };
         yes.Click += (_, _) => { DialogResult = true; };
         buttons.Children.Add(no); buttons.Children.Add(yes); DockPanel.SetDock(buttons, Dock.Bottom); layout.Children.Add(buttons);
         var content = new StackPanel();
-        content.Children.Add(new TextBox { Text = description + "\n\n이 내용을 실행할까요?", IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0), FontSize = 16 });
+        content.Children.Add(new TextBox { Text = description + UiText.Get("\n\n이 내용을 실행할까요?"), IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0), FontSize = 16 });
         if (preview != null)
         {
             using var bytes = new MemoryStream(Convert.FromBase64String(preview.Image.Base64));
@@ -37,7 +37,7 @@ internal sealed class ActionApprovalWindow : Window
                 dc.DrawLine(pen, new Point(point.X, point.Y - radius * 1.5), new Point(point.X, point.Y + radius * 1.5));
             }
             drawing.Freeze();
-            content.Children.Add(new TextBlock { Text = "빨간 표시의 위치를 누릅니다.", Margin = new Thickness(0, 16, 0, 8), FontSize = 15 });
+            content.Children.Add(new TextBlock { Text = UiText.Get("빨간 표시의 위치를 누릅니다."), Margin = new Thickness(0, 16, 0, 8), FontSize = 15 });
             content.Children.Add(new Image { Source = new DrawingImage(drawing), Stretch = Stretch.Uniform, MaxHeight = 380 });
         }
         layout.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });

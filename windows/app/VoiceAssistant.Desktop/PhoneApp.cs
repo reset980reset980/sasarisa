@@ -22,7 +22,7 @@ public partial class PhoneWindow : Window
     string? error;
     public PhoneWindow(Func<PhoneNetwork, Task> start, Func<Task> stop, Func<PhoneServer?> current, Func<Task>? startInternet = null, Func<InternetPhone?>? currentInternet = null, Func<bool>? speechEnabled = null, Func<bool, string?>? setSpeech = null)
     {
-        InitializeComponent(); this.start = start; this.stop = stop; this.current = current;
+        UiText.Ensure(); InitializeComponent(); this.start = start; this.stop = stop; this.current = current;
         this.startInternet = startInternet; this.currentInternet = currentInternet;
         this.speechEnabled = speechEnabled; this.setSpeech = setSpeech;
         SpeechPanel.Visibility = speechEnabled == null || setSpeech == null ? Visibility.Collapsed : Visibility.Visible;
@@ -34,12 +34,13 @@ public partial class PhoneWindow : Window
             foreach (PhoneNetwork network in NetworkInput.Items) if (network.Address.Equals(active.Network.Address)) NetworkInput.SelectedItem = network;
             if (System.Net.IPAddress.IsLoopback(active.Network.Address))
             {
-                Title = "시험용 · PC 내부 화면 확인";
-                PhoneHeading.Text = "PC 내부 시험 · 휴대폰 접속 불가";
-                PhoneIntro.Text = "이 주소는 개발 검증용입니다. 실제 연결은 앱의 무료 휴대폰 메뉴에서 켜세요.";
+                Title = UiText.Get("시험용 · PC 내부 화면 확인");
+                PhoneHeading.Text = UiText.Get("PC 내부 시험 · 휴대폰 접속 불가");
+                PhoneIntro.Text = UiText.Get("이 주소는 개발 검증용입니다. 실제 연결은 앱의 무료 휴대폰 메뉴에서 켜세요.");
             }
         }
-        timer.Tick += (_, _) => Refresh(); timer.Start(); Closed += (_, _) => timer.Stop(); Refresh();
+        UiText.LanguageChanged += Refresh;
+        timer.Tick += (_, _) => Refresh(); timer.Start(); Closed += (_, _) => { timer.Stop(); UiText.LanguageChanged -= Refresh; }; Refresh();
     }
     void RefreshNetworks()
     {
@@ -56,14 +57,21 @@ public partial class PhoneWindow : Window
         ModeInput.IsEnabled = !running && !changing;
         NetworkInput.Visibility = UsingInternet ? Visibility.Collapsed : Visibility.Visible;
         if (server == null || !System.Net.IPAddress.IsLoopback(server.Network.Address))
-            PhoneIntro.Text = UsingInternet ? "LTE·5G·다른 와이파이에서도 브라우저로 연결" : "같은 공유기에 연결한 휴대폰과 로컬로 연결";
+            PhoneIntro.Text = UiText.Get(UsingInternet ? "LTE·5G·다른 와이파이에서도 브라우저로 연결" : "같은 공유기에 연결한 휴대폰과 로컬로 연결");
         NetworkInput.IsEnabled = !running && !changing;
         StartButton.IsEnabled = !running && !changing; StopButton.IsEnabled = ResetButton.IsEnabled = running && !changing;
-        AddressText.Text = internet?.Url ?? server?.Url ?? "연결을 켜면 주소가 나옵니다.";
+        AddressText.Text = internet?.Url ?? server?.Url ?? UiText.Get("연결을 켜면 주소가 나옵니다.");
         CodeText.Text = internet == null ? server?.Code ?? "—" : string.Join("-", internet.Code[..4], internet.Code[4..8], internet.Code[8..]);
         var deadline = internet?.PairUntil ?? server?.PairUntil;
         var state = internet != null ? internet.Status : server?.Problem;
-        StatusText.Text = changing ? "연결 상태를 바꾸고 있어요…" : error ?? (!running ? "연결 꺼짐" : $"연결된 휴대폰 {internet?.Connected ?? server!.Connected}대 · " + (DateTimeOffset.UtcNow > deadline ? "코드 만료 · 새 코드를 받으세요." : $"코드 유효 시간: {deadline?.ToLocalTime():HH:mm}까지") + (state == null ? "" : "\n" + state));
+        if (changing) StatusText.Text = UiText.Get("연결 상태를 바꾸고 있어요…");
+        else if (error != null) StatusText.Text = UiText.Get(error);
+        else if (!running) StatusText.Text = UiText.Get("연결 꺼짐");
+        else
+        {
+            var expiry = DateTimeOffset.UtcNow > deadline ? UiText.Get("코드 만료 · 새 코드를 받으세요.") : UiText.Format("코드 유효 시간: {0:HH:mm}까지",deadline?.ToLocalTime());
+            StatusText.Text = UiText.Format("연결된 휴대폰 {0}대 · {1}",internet?.Connected ?? server!.Connected,expiry) + (state == null ? "" : "\n" + state);
+        }
     }
     void ReadReplies_Changed(object sender, RoutedEventArgs e)
     {

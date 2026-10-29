@@ -22,13 +22,13 @@ public sealed partial class ProAccountClient : IDisposable, IRemoteTransport
     public static string CredentialTarget => "VoiceAssistantWindows:api:butler-pro:" + AppPaths.InstancePrefix;
     static readonly Lazy<ProAccountClient> shared = new(() => new());
     public static ProAccountClient Shared => shared.Value;
-    public static readonly DeviceOption[] Voices =
+    public static DeviceOption[] Voices => new DeviceOption[]
     {
-        new("CxErO97xpQgQXYmapDKX", "테오 · 한국어 남성"),
-        new("QPFsEL6IBxlT15xfiD6C", "하나 · 한국어 여성"),
-        new("qfwDoLSKOhzIgz7XedPT", "선 · 한국어 여성"),
-        new("BuaKXS4Sv1Mccaw3flfU", "크리스티나 · 영어 여성"),
-        new("nPczCjzI2devNBz1zQrb", "브라이언 · 영어 남성")
+        new("CxErO97xpQgQXYmapDKX", UiText.Get("테오 · 한국어 남성")),
+        new("QPFsEL6IBxlT15xfiD6C", UiText.Get("하나 · 한국어 여성")),
+        new("qfwDoLSKOhzIgz7XedPT", UiText.Get("선 · 한국어 여성")),
+        new("BuaKXS4Sv1Mccaw3flfU", UiText.Get("크리스티나 · 영어 여성")),
+        new("nPczCjzI2devNBz1zQrb", UiText.Get("브라이언 · 영어 남성"))
     };
     readonly object gate = new();
     readonly HttpClient http;

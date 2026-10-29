@@ -19,7 +19,7 @@ public partial class App
         window.AddMessage("system", edit.Description);
         var applied = await DictationWriter.ApplyAsync(edit,
             request => MessageBox.Show(window, $"대상: {hands.TargetLabel}\n\n{request.Description}\n\nEnter 키는 앱에 따라 메시지를 전송할 수 있습니다. 실행할까요?",
-                "받아쓰기 입력 확인", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
+                UiText.Get("받아쓰기 입력 확인"), MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
             (value, ct) => hands.TypeAsync(value, ct, target), async (key, ct) =>
             {
                 // Enter may send a message. It must block undo of an earlier draft.

@@ -15,7 +15,7 @@ namespace VoiceAssistant.Desktop;
 public sealed class VideoWindow : Window
 {
     readonly WebView2 web = new();
-    readonly TextBlock status = new() { Text = "영상을 준비하고 있어요.", Margin = new Thickness(14, 8, 14, 8) };
+    readonly TextBlock status = new() { Text = UiText.Get("영상을 준비하고 있어요."), Margin = new Thickness(14, 8, 14, 8) };
     Task? initialization;
     bool closed;
     public string CurrentUrl { get; private set; } = "";
@@ -23,7 +23,7 @@ public sealed class VideoWindow : Window
 
     public VideoWindow(Func<string, YouTubeVideo, Task>? useBrowser = null)
     {
-        Title = "자비스 · 영상"; Width = 1040; Height = 760; MinWidth = 640; MinHeight = 480;
+        Title = UiText.Get("자비스 · 영상"); Width = 1040; Height = 760; MinWidth = 640; MinHeight = 480;
         var layout = new DockPanel(); var bar = new WrapPanel { Margin = new Thickness(8) };
         void Button(string label, Func<Task> action)
         {
@@ -62,17 +62,17 @@ public sealed class VideoWindow : Window
             web.CoreWebView2.Settings.IsWebMessageEnabled = false;
             web.CoreWebView2.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
             web.CoreWebView2.DownloadStarting += (_, e) => e.Cancel = true;
-            web.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true; status.Text = "외부 페이지는 ‘브라우저에서 열기’로 이용하세요."; };
+            web.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true; status.Text = UiText.Get("외부 페이지는 ‘브라우저에서 열기’로 이용하세요."); };
             web.CoreWebView2.NavigationStarting += (_, e) =>
             {
-                if (!IsAllowedUrl(e.Uri)) { e.Cancel = true; status.Text = "이 창은 유튜브 영상만 표시해요. 로그인 등은 브라우저에서 이용하세요."; }
+                if (!IsAllowedUrl(e.Uri)) { e.Cancel = true; status.Text = UiText.Get("이 창은 유튜브 영상만 표시해요. 로그인 등은 브라우저에서 이용하세요."); }
             };
             web.CoreWebView2.SourceChanged += (_, _) => { if(IsAllowedUrl(web.CoreWebView2.Source))CurrentUrl=web.CoreWebView2.Source; };
-            web.CoreWebView2.DocumentTitleChanged += (_, _) => Title="자비스 · "+web.CoreWebView2.DocumentTitle;
+            web.CoreWebView2.DocumentTitleChanged += (_, _) => Title=UiText.Get("자비스 · ")+web.CoreWebView2.DocumentTitle;
             web.CoreWebView2.NavigationCompleted += async (_, e) =>
             {
                 if (closed) return;
-                if (!e.IsSuccess) { status.Text = "영상을 불러오지 못했어요: " + e.WebErrorStatus; return; }
+                if (!e.IsSuccess) { status.Text = UiText.Get("영상을 불러오지 못했어요: ") + e.WebErrorStatus; return; }
                 try { status.Text = await ControlAsync("play", 0, CancellationToken.None); }
                 catch (Exception ex) { if (!closed) status.Text = ex.Message; }
             };
@@ -94,8 +94,8 @@ public sealed class VideoWindow : Window
         token.ThrowIfCancellationRequested(); if (closed) throw new OperationCanceledException();
         // Do not let the old video continue while the next page loads.
         if (CurrentUrl.Length > 0) await ControlAsync("pause", 0, token);
-        token.ThrowIfCancellationRequested(); CurrentUrl = video.WatchUrl; Title = "자비스 · " + video.Title;
-        status.Text = "영상을 불러오는 중 · 자동 재생이 막히면 영상의 재생 버튼을 눌러 주세요.";
+        token.ThrowIfCancellationRequested(); CurrentUrl = video.WatchUrl; Title = UiText.Get("자비스 · ") + video.Title;
+        status.Text = UiText.Get("영상을 불러오는 중 · 자동 재생이 막히면 영상의 재생 버튼을 눌러 주세요.");
         web.CoreWebView2.Navigate(CurrentUrl);
     }
 

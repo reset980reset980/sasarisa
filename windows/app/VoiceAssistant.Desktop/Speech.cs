@@ -85,7 +85,7 @@ public sealed class SpeechInput : IDisposable
         var text = await stdout; var error = await stderr;
         if (p.ExitCode != 0) throw new InvalidOperationException(error);
         foreach (var line in text.Split('\n').Where(x => x.StartsWith('{'))) { using var d = JsonDocument.Parse(line); if (d.RootElement.GetProperty("type").GetString() == "devices") return JsonSerializer.Deserialize<List<DeviceOption>>(d.RootElement.GetProperty("devices")) ?? new(); }
-        return new[] { new DeviceOption("", "Windows 기본 마이크") };
+        return new[] { new DeviceOption("", UiText.Get("Windows 기본 마이크")) };
     }
     internal static async Task<WhisperTranscript> RefineAsync(string url, string wav, CancellationToken ct, string[]? words = null, string language = "ko")
     {
@@ -127,7 +127,7 @@ public sealed class SpeechOutput : IDisposable
     CancellationTokenSource? cancel;
     public static IReadOnlyList<DeviceOption> Options(bool outputs)
     {
-        var result=new List<DeviceOption>{new("",outputs?"Windows 기본 출력 장치":"한국어 음성 자동 선택")};
+        var result=new List<DeviceOption>{new("",outputs?UiText.Get("Windows 기본 출력 장치"):UiText.Get("한국어 음성 자동 선택"))};
         object? instance=null;object? collection=null;
         try
         {
