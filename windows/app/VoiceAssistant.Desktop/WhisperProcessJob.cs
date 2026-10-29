@@ -8,6 +8,8 @@ namespace VoiceAssistant.Desktop;
 // Closing this job kills the owned server even if the assistant crashes.
 internal sealed class WhisperProcessJob : IDisposable
 {
+    const uint AfInet = 2;
+    const int TcpTableOwnerPidListener = 3;
     IntPtr handle;
     [StructLayout(LayoutKind.Sequential)] struct BasicLimits { public long UserTime, JobTime; public uint Flags; public UIntPtr MinWorkingSet, MaxWorkingSet; public uint ActiveProcesses; public UIntPtr Affinity; public uint Priority, Scheduling; }
     [StructLayout(LayoutKind.Sequential)] struct IoCounters { public ulong ReadOperations, WriteOperations, OtherOperations, ReadBytes, WriteBytes, OtherBytes; }
@@ -29,23 +31,45 @@ internal sealed class WhisperProcessJob : IDisposable
     }
     public static bool OwnsListener(int pid, int port)
     {
-        uint size = 0; _ = GetExtendedTcpTable(IntPtr.Zero, ref size, false, 2, 3, 0);
-        if (size < 4 || size > 16 * 1024 * 1024) return false;
-        var memory = Marshal.AllocHGlobal((int)size);
-        try
+        return InspectListener(pid, port).Owns;
+    }
+    internal sealed record ListenerResult(bool Owns, uint Status, int Rows, string Matching, int Queries);
+    internal delegate uint TableReader(IntPtr memory, ref uint size);
+    internal static ListenerResult InspectListener(int pid, int port, TableReader? reader = null)
+    {
+        // TCP_TABLE_OWNER_PID_LISTENER already filters out connected/non-listening
+        // endpoints. Keep that OS filter and require the exact loopback address,
+        // port and owned PID. dwState is inconsistent on this Windows build even
+        // for an endpoint returned in this filtered table (native regression checked).
+        // https://learn.microsoft.com/windows/win32/api/iprtrmib/ne-iprtrmib-tcp_table_class
+        reader ??= (IntPtr memory, ref uint length) => GetExtendedTcpTable(memory, ref length, false, AfInet, TcpTableOwnerPidListener, 0);
+        uint size = 0; var status = reader(IntPtr.Zero, ref size);
+        if (status != 122 && status != 0) return new(false, status, 0, "size query failed", 1);
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            if (GetExtendedTcpTable(memory, ref size, false, 2, 3, 0) != 0) return false;
-            int count = Marshal.ReadInt32(memory);
-            if (count < 0 || 4L + count * 24L > size) return false;
-            for (int i = 0; i < count; i++)
+            if (size < 4 || size > 16 * 1024 * 1024) return new(false,status,0,"invalid size",attempt+1);
+            var capacity = size; var memory = Marshal.AllocHGlobal((int)capacity);
+            try
             {
-                var row = IntPtr.Add(memory, 4 + i * 24);
-                if (Marshal.ReadInt32(row) == 2 && Marshal.ReadInt32(row, 4) == 0x0100007f &&
-                    (Marshal.ReadByte(row, 8) * 256 + Marshal.ReadByte(row, 9)) == port && Marshal.ReadInt32(row, 20) == pid) return true;
+                status = reader(memory, ref size);
+                if (status == 122) { if (size > capacity) continue; return new(false,status,0,"buffer did not grow",attempt+2); }
+                if (status != 0) return new(false,status,0,"table query failed",attempt+2);
+                int count = Marshal.ReadInt32(memory);
+                if (size > capacity || count < 0 || 4L + count * 24L > size) return new(false,status,count,"invalid row bounds",attempt+2);
+                string matching = "no matching port";
+                for (int i = 0; i < count; i++)
+                {
+                    var row = IntPtr.Add(memory, 4 + i * 24);
+                    if ((Marshal.ReadByte(row,8)*256 + Marshal.ReadByte(row,9)) != port) continue;
+                    var state = Marshal.ReadInt32(row); var address = Marshal.ReadInt32(row,4); var owner = Marshal.ReadInt32(row,20);
+                    matching = $"state={state}, loopback={address == 0x0100007f}, pid={owner}";
+                    if (address == 0x0100007f && owner == pid) return new(true,status,count,matching,attempt+2);
+                }
+                return new(false,status,count,matching,attempt+2);
             }
-            return false;
+            finally { Marshal.FreeHGlobal(memory); }
         }
-        finally { Marshal.FreeHGlobal(memory); }
+        return new(false,status,0,"buffer kept growing",4);
     }
     public void Dispose() { if (handle != IntPtr.Zero) { CloseHandle(handle); handle = IntPtr.Zero; } }
 }

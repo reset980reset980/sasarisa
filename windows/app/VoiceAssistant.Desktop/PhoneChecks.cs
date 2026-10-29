@@ -144,9 +144,9 @@ internal static class PhoneChecks
         {
             var oldPort = new Uri(server.Url).Port;
             await server.DisposeAsync();
-            Require(!Array.Exists(System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners(), p => p.Port == oldPort && p.Address.Equals(IPAddress.Loopback)), "Listener survived stop");
             await using var replacement = new PhoneServer(Loopback, Path.Combine(folder, "receipts.json"), (_, _) => Task.FromResult("new"));
             await replacement.StartAsync(oldPort); using var next = new PhoneProbe(replacement.Url) { Token = probe.Token };
+            Require(new Uri(replacement.Url).Port == oldPort,"Restart did not bind the released listener port");
             Require((await next.Request("/api/status")).Status == HttpStatusCode.Unauthorized, "Previous token survived restart");
             await next.Pair(replacement.Code); Require(await next.Command("hello") == "new", "Restart failed");
         });

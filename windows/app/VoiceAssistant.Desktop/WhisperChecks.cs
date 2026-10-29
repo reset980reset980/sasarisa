@@ -53,9 +53,69 @@ internal static class WhisperChecks
         await Check("Whisper owns only the correct loopback listener PID and port", () =>
         {
             var server = new TcpListener(IPAddress.Loopback, 0); server.Start();
-            try { int port = ((IPEndPoint)server.LocalEndpoint).Port; Require(WhisperProcessJob.OwnsListener(Environment.ProcessId, port), "Own listener missed"); Require(!WhisperProcessJob.OwnsListener(int.MaxValue, port), "Foreign listener accepted"); }
+            try
+            {
+                int port = ((IPEndPoint)server.LocalEndpoint).Port; var observed = WhisperProcessJob.InspectListener(Environment.ProcessId,port);
+                if (!observed.Owns)
+                {
+                    var active = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Contains(new IPEndPoint(IPAddress.Loopback,port));
+                    throw new Exception("Own listener missed: " + JsonSerializer.Serialize(observed) + $", expected pid={Environment.ProcessId}, port={port}, socketAccepts={server.Server.GetSocketOption(SocketOptionLevel.Socket,SocketOptionName.AcceptConnection)}, activeListener={active}");
+                }
+                Require(!WhisperProcessJob.OwnsListener(int.MaxValue, port), "Foreign listener accepted");
+            }
             finally { server.Stop(); }
             return Task.CompletedTask;
+        });
+        await Check("Whisper listener table retries bounded native buffer growth without losing ownership", () =>
+        {
+            int calls = 0;
+            uint Read(IntPtr memory, ref uint size)
+            {
+                calls++; if (memory == IntPtr.Zero) { size = 4; return 122; }
+                if (size < 28) { size = 28; return 122; }
+                size = 28; System.Runtime.InteropServices.Marshal.WriteInt32(memory,1);
+                var row = IntPtr.Add(memory,4); System.Runtime.InteropServices.Marshal.WriteInt32(row,2); System.Runtime.InteropServices.Marshal.WriteInt32(row,4,0x0100007f); System.Runtime.InteropServices.Marshal.WriteByte(row,8,0x12); System.Runtime.InteropServices.Marshal.WriteByte(row,9,0x34); System.Runtime.InteropServices.Marshal.WriteInt32(row,20,1234); return 0;
+            }
+            var found = WhisperProcessJob.InspectListener(1234,0x1234,Read); Require(found.Owns && found.Queries == 3 && calls == 3,"Native size race was not retried"); return Task.CompletedTask;
+        });
+        await Check("Whisper listener table bounds repeated growth errors and oversized allocations", () =>
+        {
+            uint Growing(IntPtr memory, ref uint size) { size += 28; return 122; }
+            var growth = WhisperProcessJob.InspectListener(1234,4000,Growing); Require(!growth.Owns && growth.Status == 122 && growth.Queries == 4,"Unbounded native query retry");
+            uint Denied(IntPtr memory, ref uint size) { size = 28; return 5; }
+            Require(!WhisperProcessJob.InspectListener(1234,4000,Denied).Owns,"Native query failure granted ownership");
+            uint Oversized(IntPtr memory, ref uint size) { size = 17*1024*1024; return 122; }
+            Require(WhisperProcessJob.InspectListener(1234,4000,Oversized).Queries == 1,"Excessive native allocation accepted"); return Task.CompletedTask;
+        });
+        await Check("Whisper listener table still rejects other addresses owners ports and corrupt row counts", () =>
+        {
+            foreach (var field in new[] { "address","owner","port","rows" })
+            {
+                uint Read(IntPtr memory, ref uint size)
+                {
+                    size = 28; if (memory == IntPtr.Zero) return 122;
+                    System.Runtime.InteropServices.Marshal.WriteInt32(memory,field == "rows" ? 100 : 1); var row = IntPtr.Add(memory,4);
+                    System.Runtime.InteropServices.Marshal.WriteInt32(row,0); System.Runtime.InteropServices.Marshal.WriteInt32(row,4,field == "address" ? 0 : 0x0100007f);
+                    System.Runtime.InteropServices.Marshal.WriteByte(row,8,0x12); System.Runtime.InteropServices.Marshal.WriteByte(row,9,field == "port" ? (byte)0x35 : (byte)0x34); System.Runtime.InteropServices.Marshal.WriteInt32(row,20,field == "owner" ? 4321 : 1234); return 0;
+                }
+                Require(!WhisperProcessJob.InspectListener(1234,0x1234,Read).Owns,"Untrusted listener accepted: " + field);
+            }
+            return Task.CompletedTask;
+        });
+        await Check("Whisper filtered listener table excludes a real connected client socket from the same PID", async () =>
+        {
+            var server = new TcpListener(IPAddress.Loopback,0); server.Start();
+            try
+            {
+                int port = ((IPEndPoint)server.LocalEndpoint).Port; using var client = new TcpClient();
+                var accepted = server.AcceptTcpClientAsync(); await client.ConnectAsync(IPAddress.Loopback,port); using var peer = await accepted;
+                int clientPort = ((IPEndPoint)client.Client.LocalEndPoint!).Port;
+                Require(client.Connected && peer.Connected && clientPort != port,"Connected endpoint fixture is invalid");
+                Require(WhisperProcessJob.OwnsListener(Environment.ProcessId,port),"Filtered table missed the actual listener");
+                Require(!WhisperProcessJob.OwnsListener(Environment.ProcessId,clientPort),"Connected client passed the listener-only filter");
+                Require(!WhisperProcessJob.OwnsListener(int.MaxValue,port),"Foreign PID passed the filtered table");
+            }
+            finally { server.Stop(); }
         });
         await Check("Whisper keeps quick commands immediate and preserves related dictation corrections", () =>
         {
