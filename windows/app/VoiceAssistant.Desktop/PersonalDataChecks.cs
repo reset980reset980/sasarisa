@@ -131,7 +131,7 @@ internal static class PersonalDataChecks
         });
         Check("Unsupported Mac steps exclude the whole entry with an explanation and keep other original data", () =>
         {
-            var files = new Dictionary<string, string> { ["memory.md"] = "- keep this\n", ["routines.json"] = "{\"부분실행금지\":[\"크롬 열어\",\"type hello\"],\"가능\":[\"볼륨 30\"]}", ["learned.json"] = JsonSerializer.Serialize(new Dictionary<string, object> { ["입력학습"] = new { commands = new[] { "jax\u001fvolume\u001f20", "jtype\u001fprivate text" }, uses = 0, learned = 1 } }) };
+            var files = new Dictionary<string, string> { ["memory.md"] = "- keep this\n", ["routines.json"] = "{\"부분실행금지\":[\"크롬 열어\",\"type hello\"],\"가능\":[\"볼륨 30\"]}", ["learned.json"] = JsonSerializer.Serialize(new Dictionary<string, object> { ["입력학습"] = new { commands = new[] { "jax\u001fvolume\u001f20", "jax\u001fclick\u001f40\u001f20" }, uses = 0, learned = 1 } }) };
             var parsed = MacPersonalTransfer.Parse(files);
             Require(parsed.Package.Personal.Routines.Count == 1 && parsed.Package.Personal.Routines.ContainsKey("가능") && parsed.Package.Personal.Learned.Count == 0 && parsed.Package.Personal.Notes.Single() == "keep this" && parsed.Notices.Any(x => x.Contains("부분실행금지")) && parsed.Notices.Any(x => x.Contains("입력학습")), "Unsupported sequence was partially imported or silently dropped");
         });

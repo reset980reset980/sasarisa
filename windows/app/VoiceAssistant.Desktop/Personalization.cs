@@ -50,11 +50,22 @@ public sealed class Personalization
     static void ValidateState(PersonalState value)
     {
         if (value.Routines == null || value.Learned == null || value.Notes == null || value.MacLearning == null || value.MacLearning.Count > 1000 || value.MacLearning.Any(x => !value.Learned.ContainsKey(x.Key) || x.Value == null || x.Value.Uses < 0 || !double.IsFinite(x.Value.Learned)) || value.Routines.Count > 1000 || value.Learned.Count > 1000 || value.Notes.Count > 1000 || value.Notes.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 4000)) throw new JsonException("Invalid personal data");
-        void Actions(IReadOnlyCollection<AssistantAction>? actions) { if (actions == null || actions.Count is < 1 or > 8 || actions.Any(a => a == null || !Reusable.Contains(a.Kind) || a.Value == null || a.Value.Length > 4000)) throw new JsonException("Invalid stored actions"); }
+        void Actions(IReadOnlyCollection<AssistantAction>? actions) { if (actions == null || actions.Count is < 1 or > 8 || !CanReuse(actions)) throw new JsonException("Invalid stored actions"); }
         foreach (var row in value.Routines) { if (string.IsNullOrWhiteSpace(row.Key) || row.Key.Length > 30) throw new JsonException(); Actions(row.Value); }
         foreach (var row in value.Learned) { if (string.IsNullOrWhiteSpace(row.Key) || row.Key.Length > 6000 || row.Value == null || row.Value.Reply == null || row.Value.Reply.Length > 12000) throw new JsonException(); Actions(row.Value.Actions?.ToArray()); }
     }
-    public static bool CanReuse(IEnumerable<AssistantAction> actions) => actions.Any() && actions.All(a => Reusable.Contains(a.Kind));
+    public static bool CanReuse(IEnumerable<AssistantAction> actions)
+    {
+        var list = actions.ToArray();
+        if (list.Length == 0) return false;
+        foreach (var action in list)
+        {
+            if (action == null || action.Value == null || action.Value.Length > 4000) return false;
+            if (Reusable.Contains(action.Kind)) continue;
+            try { ScreenLearning.ValidateStored(action); } catch (ArgumentException) { return false; }
+        }
+        return true;
+    }
     void Update(Action<PersonalState> update)
     {
         if (Error != null) throw new InvalidOperationException(Error);
@@ -83,8 +94,8 @@ public sealed class Personalization
     }
     static List<AssistantAction> ValidActions(IEnumerable<AssistantAction> actions)
     {
-        var result = actions.ToList(); if (result.Count is < 1 or > 8 || !CanReuse(result)) throw new ArgumentException("앱 열기·검색·소리·타이머 동작을 1~8개 넣으세요.");
-        foreach (var action in result) ActionPolicy.Validate(action); return result;
+        var result = actions.ToList(); if (result.Count is < 1 or > 8 || !CanReuse(result)) throw new ArgumentException("지원하는 앱·검색·소리·타이머·학습한 화면 동작을 1~8개 넣으세요.");
+        foreach (var action in result) { if (ScreenLearning.IsStored(action)) ScreenLearning.ValidateStored(action); else ActionPolicy.Validate(action); } return result;
     }
     public void SaveRoutine(string name, IEnumerable<AssistantAction> actions, string? original, int expectedVersion)
     {
@@ -119,12 +130,21 @@ public sealed class Personalization
     public static CommandPlan ParseStep(string command)
     {
         command = command.Trim();
+        AssistantAction? stored = null;
+        var keyCommand = Regex.Match(command, @"^(?:키|key)\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var buttonCommand = Regex.Match(command, @"^(?:버튼|button)\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (keyCommand.Success) stored = ScreenLearning.Input(new("key", keyCommand.Groups[1].Value.Trim()), false) ?? throw new ArgumentException("이 키는 저장 동작으로 사용할 수 없어요.");
+        else if (buttonCommand.Success) stored = ScreenLearning.Control("learned_press", new("", "", buttonCommand.Groups[1].Value.Trim(), "", "", null, 0));
+        if (stored != null) return new("저장한 화면 동작을 실행했어요.", new[] { stored });
         var plan = Uri.TryCreate(command, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? new CommandPlan("웹 페이지를 열었어요.", new[] { new AssistantAction("open_url", command) }) : CommandParser.Parse(command);
         if (plan == null) throw new ArgumentException("이 명령은 바로 실행 동작으로 해석하지 못했어요. 예: ‘메모장 열어’, ‘볼륨 30’, ‘3분 타이머’");
+        if (plan.Actions.Count == 1 && plan.Actions[0].Kind is "type" or "key")
+            plan = plan with { Actions = new[] { ScreenLearning.Input(plan.Actions[0], false) ?? throw new ArgumentException("이 입력은 저장 동작으로 사용할 수 없어요.") } };
         ValidActions(plan.Actions); return plan;
     }
     public static string DescribeAction(AssistantAction action) => action.Kind switch
     {
+        _ when ScreenLearning.IsStored(action) => ScreenLearning.Describe(action),
         "display_off" => "모니터 화면 끄기",
         "open_app" => (AppRegistry.Default.Find(action.Value)?.Name ?? CommandParser.Apps.FirstOrDefault(x => x.Value == action.Value).Key ?? "이전에 등록한 앱") + " 열기",
         "open_url" => "웹 열기 · " + action.Value, "volume" => $"음량 {action.Number}%", "volume_delta" => $"음량 {(action.Number > 0 ? "+" : "")}{action.Number}%",
@@ -190,7 +210,7 @@ public sealed class Personalization
     }
     public void Learn(string text, CommandPlan plan)
     {
-        if (Error != null || CommandParser.RequiresObservations(text) || !CanReuse(plan.Actions)) return;
+        if (Error != null || CommandParser.RequiresObservations(text) || !CanReuse(plan.Actions) || ScreenLearning.HasScreenSteps(plan.Actions) && Key(text).Length < 4) return;
         var normalized = CommandParser.Normalize(text); var matches = state.Learned.Keys.Where(x => Key(x) == Key(normalized)).Take(2).ToArray();
         var key = state.Learned.ContainsKey(normalized) ? normalized : matches.Length == 1 ? matches[0] : normalized;
         Update(s => { s.Learned[key] = plan; while (s.Learned.Count > 100) { var oldest = s.Learned.Keys.First(); s.Learned.Remove(oldest); s.MacLearning.Remove(oldest); } }); lastLearned = key;

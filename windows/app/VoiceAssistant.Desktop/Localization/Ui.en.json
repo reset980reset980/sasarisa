@@ -333,5 +333,12 @@
   "화면 작업 권한이 바뀌어 중단했어요. 대상을 다시 확인하세요.": "Screen access changed. Check the target again.",
   "이미 끝난 화면 요청이에요.": "This screen request has ended.",
   "암호 입력은 전체 작업 권한에서만 허용합니다.": "Password input requires Full tool access.",
-  "\n\n암호 입력칸에 {0}자를 전달합니다. 내용은 읽거나 표시하지 않으며 자동으로 되돌릴 수 없습니다.": "\n\nSend {0} characters to the password field. Its contents are never read or displayed and cannot be restored by undo."
+  "\n\n암호 입력칸에 {0}자를 전달합니다. 내용은 읽거나 표시하지 않으며 자동으로 되돌릴 수 없습니다.": "\n\nSend {0} characters to the password field. Its contents are never read or displayed and cannot be restored by undo.",
+  "글 입력 · {0}": "Type text · {0}",
+  "키 누르기 · {0}": "Press key · {0}",
+  "버튼·메뉴 누르기": "Press button or menu",
+  "입력칸 전체 교체": "Replace field contents",
+  "입력칸 커서에 추가": "Insert at field cursor",
+  "지원하는 앱·검색·소리·타이머·학습한 화면 동작을 1~8개 넣으세요.": "Add 1–8 supported app, search, audio, timer or learned screen actions.",
+  "예: 메모장 열어 · 볼륨 30 · 키 ctrl+c · 버튼 저장 · 안녕하세요 라고 써 줘\n최대 8개. 화면 동작은 현재 작업 창을 매번 확인하고 제한 권한으로 실행해요. 암호 입력·창 닫기 키는 학습하지 않아요.": "Examples: open Notepad · volume 30 · key ctrl+c · button Save · type hello\nUp to 8 steps. Screen actions check the current work window and run with Safe access. Password input and window-closing keys are never learned."
 }

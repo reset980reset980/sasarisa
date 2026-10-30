@@ -9,17 +9,18 @@ namespace VoiceAssistant.Desktop;
 
 public partial class App
 {
-    async Task<AgentRunResult> RunAiAsync(string text, string screen, CancellationToken token)
+    async Task<AgentRunResult> RunAiAsync(string text, string screen, CancellationToken token, CommandPlan? replay = null)
     {
-        var selection = ComboBrain.Resolve(settings, text);
-        var requestSettings = selection.Settings;
+        var selection = replay == null ? ComboBrain.Resolve(settings, text) : null;
+        // The original learned replay always uses safe mode, independently of AI full access.
+        var requestSettings = selection?.Settings ?? settings with { BrainAccess = "safe" };
         using var screenAccess = ScreenAccess.Begin(requestSettings.BrainAccess,token);
-        if (settings.BrainProvider == "combo")
+        if (selection != null && settings.BrainProvider == "combo")
         {
             window.AddMessage("system", selection.Description);
             AppPaths.Log("combo", selection.Provider);
         }
-        if (requestSettings.BrainProvider == "aside")
+        if (replay == null && requestSettings.BrainProvider == "aside")
         {
             var remoteRequest = RemoteExecution.Current;
             void Progress(string value) => Dispatcher.BeginInvoke(() =>
@@ -147,7 +148,7 @@ public partial class App
                 }
                 var description = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Describe(action) : AgentRun.Describe(action);
                 var effect = action.Kind is "press_control" or "fill_field" or "insert_field" ? Controls().Effect(action) : ExecutionConsent.Effect(action);
-                if (action.Kind == "tap" && (requestSettings.FreeMode || requestSettings.ConfirmDelegate != "always"))
+                if (action.Kind == "tap")
                 {
                     preparedButton = await Controls().PrepareButtonAsync(action, cancellation);
                     effect = preparedButton.Effect; description = preparedButton.Controls.Describe(new("press_control", preparedButton.Id));
@@ -223,6 +224,8 @@ public partial class App
                         var keyChord = KeyboardChord.Parse(action.Value); var keyFocus = confirmedKeyAction == action ? confirmedKeyFocus : null;
                         confirmedKeyFocus = null; confirmedKeyAction = null;
                         if (keyChord.NeedsConfirmation && keyFocus == null) throw new AgentStoppedException("키 입력 대상 확인이 필요해 멈췄어요.");
+                        var learningKeyFocus = keyFocus ?? await hands.CaptureKeyFocusAsync(bound!, cancellation);
+                        var keyReplay = ScreenLearning.Input(action, learningKeyFocus.Sensitive);
                         try { await hands.KeyAsync(action.Value, cancellation, bound, [hotkeys?.Wake, hotkeys?.Stop], keyFocus); }
                         catch { actionHistory.Record("중단된 키 입력", unavailable: "대상 앱에서 실제 키 입력 결과를 확인하세요."); throw; }
                         controls = null; controlsTarget = null;
@@ -234,7 +237,7 @@ public partial class App
                             catch (Exception ex) when (ex is not OperationCanceledException) { bound = null; browserAnchor = null; context = hands.CaptureForegroundContext(); }
                         }
                         actionHistory.Record("키 입력 · " + keyChord.Label, unavailable: "해당 앱에서 입력 결과를 확인하고 필요한 경우 직접 되돌리세요.");
-                        return new(bound == null ? "키 입력을 전달했어요. 후속 입력 전 창 목록에서 작업 대상을 다시 선택하세요." : "키 입력을 대상 앱에 전달했어요. 실제 결과는 화면에서 확인하세요.", JsonSerializer.Serialize(new { key = keyChord.Label, WindowChanged = changedWindow, CanContinue = bound != null }));
+                        return new(bound == null ? "키 입력을 전달했어요. 후속 입력 전 창 목록에서 작업 대상을 다시 선택하세요." : "키 입력을 대상 앱에 전달했어요. 실제 결과는 화면에서 확인하세요.", JsonSerializer.Serialize(new { key = keyChord.Label, WindowChanged = changedWindow, CanContinue = bound != null }), Replay: keyReplay, NoLearn: keyReplay == null);
                     case "list_windows":
                         var windowPage = await windows.ListAsync(action.Value, action.Number, cancellation);
                         return new($"열린 앱 창 {windowPage.Windows.Count}개를 확인했어요.", WindowTargets.Data(windowPage));
@@ -265,19 +268,22 @@ public partial class App
                         var page = await Controls().ListAsync(action.Value, action.Number, cancellation);
                         return new($"화면 항목 {page.Controls.Count}개를 확인했어요.", ControlObservation.Data(page));
                     case "press_control":
+                        var pressReplay = Controls().LearningAction(action);
                         try { await Controls().PressAsync(action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 화면 항목 누르기 요청", unavailable: "대상 앱에서 실제 반영된 결과를 확인하세요."); throw; }
                         actionHistory.Record("조회한 화면 항목 누르기", unavailable: "대상 앱에서 실제 반영된 결과를 확인하세요.");
-                        return new("조회한 항목에 누르기를 전달했어요. 결과 화면을 다시 확인하세요.");
+                        return new("조회한 항목에 누르기를 전달했어요. 결과 화면을 다시 확인하세요.", Replay: pressReplay, NoLearn: pressReplay == null);
                     case "fill_field":
                         var sensitiveField=Controls().Sensitive(action.Target);
+                        var fillReplay = Controls().LearningAction(action);
                         try { await Controls().FillAsync(action.Target, action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 입력칸 글 교체 요청", unavailable: "글의 일부가 입력됐을 수 있어요. 대상 입력칸을 확인하세요."); throw; }
-                        return new(sensitiveField ? "암호 입력 요청을 전달했어요. 암호 내용은 읽거나 확인하지 않았어요." : "선택한 입력칸의 내용이 요청한 글과 일치하는 것을 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length, sensitive = sensitiveField, contents_verified = !sensitiveField }));
+                        return new(sensitiveField ? "암호 입력 요청을 전달했어요. 암호 내용은 읽거나 확인하지 않았어요." : "선택한 입력칸의 내용이 요청한 글과 일치하는 것을 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length, sensitive = sensitiveField, contents_verified = !sensitiveField }), Replay: fillReplay, NoLearn: fillReplay == null);
                     case "insert_field":
+                        var insertReplay = Controls().LearningAction(action);
                         try { await Controls().InsertAsync(action.Target, action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 입력칸 글 추가 요청", unavailable: "글의 일부가 입력됐을 수 있어요. 대상 입력칸을 확인하세요."); throw; }
-                        return new("선택한 입력칸에 글을 넣고 나머지 내용과 최종 커서 위치를 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length }));
+                        return new("선택한 입력칸에 글을 넣고 나머지 내용과 최종 커서 위치를 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length }), Replay: insertReplay, NoLearn: insertReplay == null);
                     case "list_timers":
                         var list = timers.Items.OrderBy(x => x.Due).ToArray();
                         return new($"진행 중인 타이머 {list.Length}개를 확인했어요.", JsonSerializer.Serialize(list.Select(x => new { id = x.Id, label = x.Label, due = x.Due, remaining_seconds = Math.Max(0, (int)Math.Ceiling((x.Due - DateTimeOffset.Now).TotalSeconds)) })));
@@ -289,6 +295,9 @@ public partial class App
                         return new($"유튜브 영상 {videos.Count}개를 찾았어요.", JsonSerializer.Serialize(videos.Select((x, i) => new { number = i + 1, title = x.Title, url = x.WatchUrl })));
                 }
                 var previousOwned = ownedWindows.LastOrDefault();
+                AssistantAction? inputReplay = null;
+                if (action.Kind == "type") inputReplay = ScreenLearning.Input(action, (await hands.CaptureKeyFocusAsync(bound!, cancellation)).Sensitive);
+                if (action.Kind == "tap" && preparedButton != null) inputReplay = preparedButton.Controls.LearningAction(new("press_control", preparedButton.Id));
                 var result = await ExecuteAsync(action, cancellation, bound, button: preparedButton);
                 cancellation.ThrowIfCancellationRequested();
                 if (action.Kind is "open_app" or "open_url" or "type" or "key" or "tap" or "browser") { controls = null; controlsTarget = null; }
@@ -313,7 +322,7 @@ public partial class App
                     "key" or "tap" or "browser" or "media" => "대상 앱에 동작을 전달했어요. 앱 화면의 결과는 추가 확인이 필요할 수 있어요.",
                     "volume" or "volume_delta" => $"음량이 {Math.Round(VolumeControl.Capture().Level * 100)}%예요.",
                     _ => "동작을 처리했어요."
-                }));
+                }), Replay: inputReplay, NoLearn: action.Kind is "type" or "tap" && inputReplay == null);
             }
         void Starting(int step, AssistantAction action)
             {
@@ -328,6 +337,18 @@ public partial class App
                 window.AddMessage("system", $"{observation.Step}번째 동작 · {observation.Summary}");
                 AppPaths.Log("agent-step", JsonSerializer.Serialize(new { observation.Round, observation.Step, observation.Action.Kind, observation.Status, observation.Summary }));
             }
+        if (replay != null)
+        {
+            overlay.HideOverlay();
+            return await ScreenLearning.ReplayAsync(replay, async (stored, cancellation) =>
+            {
+                using var accessBinding = screenAccess.Enter();
+                if (!ScreenLearning.IsStored(stored)) return stored;
+                if (!ScreenLearning.IsControl(stored)) return ScreenLearning.RuntimeInput(stored);
+                await Guard(new("list_controls"));
+                return await Controls().PrepareReplayAsync(stored, cancellation);
+            }, Approve, Execute, Starting, Observed, token);
+        }
         if (requestSettings.BrainProvider is "claude" or "codex")
         {
             var run = new McpAgentRun(Approve, Execute, Starting, Observed);

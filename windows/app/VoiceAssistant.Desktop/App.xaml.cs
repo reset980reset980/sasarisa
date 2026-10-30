@@ -416,6 +416,12 @@ public partial class App : System.Windows.Application
             }
             parsed = ResolveWithShared(text, parsed, out var sharedUsed);
             if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", StopReply); return; }
+            if (parsed != null && ScreenLearning.HasScreenSteps(parsed.Actions))
+            {
+                var replayed = await RunAiAsync(text, "", token, parsed);
+                token.ThrowIfCancellationRequested(); if (!replayed.Finished) offerAfterTurn = null;
+                parsed = new(replayed.Reply, Array.Empty<AssistantAction>());
+            }
             if (parsed == null)
             {
                 window.SetStatus("생각하는 중", UiText.Copy("{0}에 연결하고 있어요.",Brain.NameFor(settings.BrainProvider)), listening, true);

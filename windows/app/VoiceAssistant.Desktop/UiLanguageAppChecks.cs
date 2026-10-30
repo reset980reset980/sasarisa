@@ -110,9 +110,12 @@ internal static class UiLanguageAppChecks
             Check("Personal-data editor and import review localize controls without translating or applying personal content",()=>
             {
                 UiText.Apply("en");var store=new Personalization(Path.Combine(AppPaths.Home,"ui-personal.json"));var apps=new AppRegistry(Path.Combine(AppPaths.Home,"ui-apps.json"));
-                store.SaveNote(null,"설정",store.Version);var before=File.ReadAllBytes(store.StoragePath);
+                store.SaveNote(null,"설정",store.Version);store.SaveLearned("설정","대화",new[]{new AssistantAction("learned_type","사용자 문장")},null,store.Version);var before=File.ReadAllBytes(store.StoragePath);
                 var editor=Track(new PersonalWindow(store));Require(editor.Title=="Manage memory, routines and learned actions","Personal editor title missing");
                 Require(Children<ComboBox>(editor).SelectMany(x=>x.Items.OfType<DeviceOption>()).Any(x=>x.Id=="notes" && x.Label=="Memories"),"Category IDs or labels changed");
+                Children<ComboBox>(editor).Single(x=>x.Items.OfType<DeviceOption>().Any(v=>v.Id=="learned")).SelectedValue="learned";
+                Children<ListBox>(editor).Single(x=>AutomationProperties.GetName(x)==UiText.Get("저장 항목 목록")).SelectedIndex=0;
+                Require(Children<TextBox>(editor).Any(x=>x.Text=="설정") && Children<TextBox>(editor).Any(x=>x.Text=="대화") && Children<TextBlock>(editor).Any(x=>x.Text.Contains("key ctrl+c") && x.Text.Contains("Safe access")),"Learned screen editor lost user data or English help");
                 var package=new PersonalDataPackage(PersonalDataTransfer.Format,1,new PersonalState{Notes=new(){"대화"}},Array.Empty<PortableApp>());
                 var review=Track(new PersonalImportWindow(new(package,Array.Empty<string>()),store,apps));
                 Require(review.Title=="Review memories and routines to import" && review.Apply.Content?.ToString()=="Apply reviewed personal data" && review.Description.StartsWith("Add 1 · Replace 0 · Keep existing / duplicate 0\nAdd memory · 대화",StringComparison.Ordinal),"Review copy missing or data translated");

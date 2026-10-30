@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--screen-learning-only"))
+        {
+            failed = await ScreenLearningChecks.RunAsync(rows);
+            var report = Path.Combine(AppPaths.Home, "screen-learning-checks.json"); Directory.CreateDirectory(AppPaths.Home);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, microphoneCapture = false, speakerPlayback = false, visibleWindows = false, realAppExecution = false, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--ai-usage-only") || args.Contains("--ai-usage-native"))
         {
             failed = await AiUsageChecks.RunAsync(rows, args.Contains("--ai-usage-native"));
@@ -347,7 +353,7 @@ public static class Checks
         Check("routine saves and reopens", () => { var p = personal.Resolve("앞으로 '작업 시작' 하면 메모장 열고 소리 30으로 해")!; personal.Execute(p.Actions[0]); var loaded = new Personalization(stateFile).Resolve("작업 시작")!; Equal(loaded.Actions.Count, 2); Equal(loaded.Actions[0].Kind, "open_app"); Equal(loaded.Actions[1].Number, 30); });
         Check("unsafe routine refused", () => Rejected(() => personal.Resolve("앞으로 '인사' 하면 안녕하세요 라고 써 줘")));
         Check("memory persisted", () => { personal.Execute(new("remember", "차는 녹차를 좋아한다")); Equal(new Personalization(stateFile).MemoryContext, "차는 녹차를 좋아한다"); });
-        Check("typing never learned", () => Equal(Personalization.CanReuse(new[] { new AssistantAction("type", "hello") }), false));
+        Check("raw typing requires inspected learning metadata", () => Equal(Personalization.CanReuse(new[] { new AssistantAction("type", "hello") }), false));
         Check("multi command", () => Equal(personal.Resolve("메모장 열고 소리 줄여")!.Actions.Count, 2));
         Check("delegate requires review", () => Equal(ActionPolicy.NeedsConfirmation(new("delegate", "버그 고쳐"), false), true));
         Check("voice delegate parsed", () => Equal(personal.Resolve("클로드한테 로그인 버그 고쳐 줘")!.Actions[0].Kind, "delegate"));
@@ -403,6 +409,7 @@ public static class Checks
         failed += CodexEffortChecks.Run(rows);
         failed += BrainAccessChecks.Run(rows);
         failed += await ScreenAccessChecks.RunAsync(rows);
+        failed += await ScreenLearningChecks.RunAsync(rows);
         failed += InputDeviceChecks.Run(rows);
         failed += await ConversationLanguageChecks.RunAsync(rows);
         failed += await ExecutionConsentChecks.RunAsync(rows);

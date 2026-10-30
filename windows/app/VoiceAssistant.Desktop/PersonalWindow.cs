@@ -49,7 +49,7 @@ public sealed partial class PersonalWindow : Window
         var order = new WrapPanel { Margin = new Thickness(0,7,0,0) };
         order.Children.Add(Button(UiText.Get("위로"), (_,_) => Move(-1))); order.Children.Add(Button(UiText.Get("아래로"), (_,_) => Move(1))); order.Children.Add(Button(UiText.Get("동작 빼기"), (_,_) => { if (steps.SelectedItem is Step step) draft.Remove(step); })); actionPanel.Children.Add(order);
         actionPanel.Children.Add(Label(UiText.Get("추가할 명령"))); actionPanel.Children.Add(command); actionPanel.Children.Add(Button(UiText.Get("동작 추가"), (_,_) => AddStep()));
-        actionPanel.Children.Add(new TextBlock { Text = UiText.Get("예: 메모장 열어 · 볼륨 30 · 3분 타이머 · https://example.com\n최대 8개. 글 입력이나 전송은 저장 동작에 넣을 수 없어요."), Foreground = Brushes.SlateGray, TextWrapping = TextWrapping.Wrap, LineHeight = 21 }); editor.Children.Add(actionPanel);
+        actionPanel.Children.Add(new TextBlock { Text = UiText.Get("예: 메모장 열어 · 볼륨 30 · 키 ctrl+c · 버튼 저장 · 안녕하세요 라고 써 줘\n최대 8개. 화면 동작은 현재 작업 창을 매번 확인하고 제한 권한으로 실행해요. 암호 입력·창 닫기 키는 학습하지 않아요."), Foreground = Brushes.SlateGray, TextWrapping = TextWrapping.Wrap, LineHeight = 21 }); editor.Children.Add(actionPanel);
         var scroll = new ScrollViewer { Content = editor, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0,0,9,0) }; Grid.SetColumn(scroll, 2); grid.Children.Add(scroll);
         category.SelectionChanged += (_,_) => Refresh(); category.SelectedIndex = 0;
     }

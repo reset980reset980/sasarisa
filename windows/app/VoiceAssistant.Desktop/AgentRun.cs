@@ -1,18 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace VoiceAssistant.Desktop;
 
-public sealed record ActionOutcome(string Summary, string? Data = null, AssistantImage? Image = null);
-public sealed record ActionObservation(int Round, int Step, AssistantAction Action, string Status, string Summary, string? Data = null);
+public sealed record ActionOutcome(string Summary, string? Data = null, AssistantImage? Image = null, [property: JsonIgnore] AssistantAction? Replay = null, [property: JsonIgnore] bool NoLearn = false);
+public sealed record ActionObservation(int Round, int Step, AssistantAction Action, string Status, string Summary, string? Data = null, [property: JsonIgnore] AssistantAction? Replay = null, [property: JsonIgnore] bool NoLearn = false);
 public sealed record AgentRunResult(string Reply, IReadOnlyList<ActionObservation> Observations, bool Finished, bool Declined = false)
 {
-    // Conditional plans must be evaluated again next time, not cached as a routine.
-    public CommandPlan? LearningPlan => Finished && Observations.Count > 0 && Observations.All(x => x.Round == 1 && x.Status == "succeeded") && Personalization.CanReuse(Observations.Select(x => x.Action))
-        ? new(Reply, Observations.Select(x => x.Action).ToArray()) : null;
+    public CommandPlan? LearningPlan => ScreenLearning.Plan(this);
 }
 public sealed class AgentStoppedException(string message) : InvalidOperationException(message);
 
@@ -53,7 +52,7 @@ public static class AgentRun
                     }
                     token.ThrowIfCancellationRequested(); starting?.Invoke(step, action);
                     var outcome = await execute(action, token);
-                    var observation = new ActionObservation(round, step, action, "succeeded", outcome.Summary, outcome.Data);
+                    var observation = new ActionObservation(round, step, action, "succeeded", outcome.Summary, outcome.Data, outcome.Replay, outcome.NoLearn);
                     results.Add(observation); observed?.Invoke(observation);
                 }
                 catch (OperationCanceledException) { throw; }

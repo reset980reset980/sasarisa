@@ -92,13 +92,34 @@ public static class MacPersonalTransfer
         List<AssistantAction> Learned(string command)
         {
             var tokens = command.Split('\u001f');
+            if (tokens.Length >= 2 && tokens[0] == "jtype")
+            {
+                var typed = ScreenLearning.Input(new("type", string.Join(" ", tokens.Skip(1))), false) ?? throw new ArgumentException("학습한 입력 내용이 올바르지 않음");
+                return new() { typed };
+            }
+            if (tokens.Length == 3 && tokens[0] == "jax" && tokens[1] == "key")
+            {
+                var key = ScreenLearning.Input(new("key", tokens[2]), false) ?? throw new ArgumentException("창·탭·앱을 닫는 키는 학습하지 않음");
+                return new() { key };
+            }
+            if (tokens.Length is 3 or 4 && tokens[0] == "jax" && tokens[1] == "tap")
+            {
+                var occurrence = tokens.Length == 4 && int.TryParse(tokens[3], out var n) ? n : tokens.Length == 3 ? 1 : 0;
+                if (occurrence < 1 || string.IsNullOrWhiteSpace(tokens[2])) throw new ArgumentException("Mac 버튼의 이름·순서를 확인해야 함");
+                return new() { ScreenLearning.Control("learned_press", new("", "", tokens[2], "", "", null, occurrence)) };
+            }
+            if (tokens.Length == 4 && tokens[0] == "jax" && tokens[1] == "field")
+            {
+                if (string.IsNullOrWhiteSpace(tokens[2])) throw new ArgumentException("이름 없는 Mac 입력칸은 Windows에서 다시 지정해야 함");
+                return new() { ScreenLearning.Control("learned_insert", new("", "", tokens[2], "", "", true, 1), tokens[3]) };
+            }
             if (tokens.Length == 3 && tokens[0] == "jax")
             {
                 if (tokens[1] == "open-app") return new() { new("open_app", App(tokens[2])) };
                 if (tokens[1] == "open-url") return new() { new("open_url", tokens[2]) };
                 if (tokens[1] == "volume" && int.TryParse(tokens[2], out var volume) && volume is >= 0 and <= 100) return new() { new("volume", Number: volume) };
             }
-            throw new ArgumentException("Mac 화면·키 입력 또는 지원하지 않는 학습 동작 — Windows 관리 화면에서 다시 지정하세요");
+            throw new ArgumentException("지원하지 않는 Mac 학습 동작 — Windows 관리 화면에서 다시 지정하세요");
         }
         void ImportEntries(string fileName, bool learned)
         {
@@ -133,6 +154,7 @@ public static class MacPersonalTransfer
             }
         }
         ImportEntries("routines.json", false); ImportEntries("learned.json", true);
+        if (state.Learned.Values.Any(x => ScreenLearning.HasScreenSteps(x.Actions))) notices.Add("화면·키 학습은 Windows의 현재 작업 창에서 제한 권한으로 실행하며, 이름·문맥을 새로 확인합니다. Mac 키의 cmd는 Ctrl, option은 Alt로 바꿉니다. 화면 배치·이름이 다른 항목은 Windows에서 다시 지정하세요. 가져오기 중에는 실행하지 않습니다.");
         notices.Add("가져오기는 명령을 실행하지 않아요. 루틴과 배운 말은 다음에 직접 호출할 때 사용합니다. 제외한 항목의 원본 파일은 그대로 유지합니다.");
         return new(PersonalDataTransfer.Build(state, refs), notices.ToArray());
     }

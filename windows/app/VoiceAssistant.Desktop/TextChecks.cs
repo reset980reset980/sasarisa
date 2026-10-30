@@ -100,7 +100,8 @@ internal static class TextChecks
             Reject(() => store.SaveRoutine("작업시작", new[] { new AssistantAction("volume", Number: 20) }, null, store.Version));
             Reject(() => store.SaveRoutine("글 입력", new[] { new AssistantAction("type", "hello") }, null, store.Version));
             Reject(() => store.SaveRoutine("많은 동작", Enumerable.Repeat(new AssistantAction("volume", Number: 30),9), null, store.Version));
-            Reject(() => Personalization.ParseStep("안녕하세요 라고 써 줘")); Reject(() => Personalization.ParseStep("https://user:secret@example.com"));
+            Require(Personalization.ParseStep("안녕하세요 라고 써 줘").Actions.Single().Kind == "learned_type", "Managed text input not converted to guarded replay");
+            Reject(() => Personalization.ParseStep("키 alt+f4")); Reject(() => Personalization.ParseStep("https://user:secret@example.com"));
             Require(Personalization.ParseStep("https://example.com").Actions.Single().Kind == "open_url", "URL step not supported"); return Task.CompletedTask;
         });
         return failed;

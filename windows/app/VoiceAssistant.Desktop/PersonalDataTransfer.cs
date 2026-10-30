@@ -40,8 +40,9 @@ public static class PersonalDataTransfer
     }
     internal static void ValidateAction(AssistantAction action, ISet<string> appIds, bool allowMissingApps = false)
     {
-        if (action == null || action.Value == null || action.Value.Length > 4000 || !Personalization.CanReuse(new[] { action })) throw new ArgumentException(UiText.Get("저장 동작에는 앱 열기·검색·음량·미디어·타이머만 넣을 수 있어요."));
-        if (action.Kind == "open_app" && Custom(action.Value))
+        if (action == null || action.Value == null || action.Value.Length > 4000 || !Personalization.CanReuse(new[] { action })) throw new ArgumentException(UiText.Get("지원하는 앱·검색·소리·타이머·학습한 화면 동작을 1~8개 넣으세요."));
+        if (ScreenLearning.IsStored(action)) ScreenLearning.ValidateStored(action);
+        else if (action.Kind == "open_app" && Custom(action.Value))
         {
             if (!allowMissingApps && !appIds.Contains(action.Value)) throw new ArgumentException(UiText.Get("등록 앱의 연결 정보가 빠졌어요."));
             ActionPolicy.Validate(action with { Value = "notepad" });
@@ -175,6 +176,7 @@ public static class PersonalDataTransfer
     internal static string Describe(AssistantAction action) => Describe(action, AppRegistry.Default.Items);
     internal static string Describe(AssistantAction action, IReadOnlyList<RegisteredApp> apps) => action.Kind switch
     {
+        _ when ScreenLearning.IsStored(action) => ScreenLearning.Describe(action),
         "open_app" => UiText.Get("앱 열기 · ") + (apps.FirstOrDefault(x => x.Id == action.Value)?.Name ?? CommandParser.Apps.FirstOrDefault(x => x.Value == action.Value).Key ?? UiText.Get("다시 연결할 앱")),
         "open_url" => UiText.Get("웹페이지 열기 · ") + action.Value,
         "volume" => UiText.Get("음량 ") + action.Number + "%",

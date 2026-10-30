@@ -49,13 +49,14 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
     readonly Dictionary<string, DesktopControl> observed = new(StringComparer.Ordinal);
     DateTimeOffset expires;
     string observedWindow = "";
+    string observedApplication = "";
     string observedAccess="safe";
     public async Task<ControlPage> ListAsync(string filter, int offset, CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); observed.Clear();
         if (filter.Length > 120 || offset is < 0 or > 240) throw new ArgumentException("화면 목록의 검색어나 페이지를 확인하세요.");
         var access=ScreenAccess.Mode;ScreenAccess.EnsureActive();var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();ScreenAccess.Require(access);observedAccess=access;
-        observedWindow = snapshot.Window;
+        observedWindow = snapshot.Window; observedApplication = snapshot.Application;
         var all = snapshot.Controls.Where(x => !x.Sensitive || ScreenAccess.Full).Where(x => filter.Length == 0 || x.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || x.Context.Contains(filter, StringComparison.OrdinalIgnoreCase)).Take(240).ToArray();
         var page = all.Skip(offset).Take(PageSize).Select(x =>
         {
@@ -72,6 +73,37 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
         return control;
     }
     internal bool Sensitive(string id) => Find(id).Sensitive;
+    internal AssistantAction? LearningAction(AssistantAction action)
+    {
+        var control = Find(action.Kind is "fill_field" or "insert_field" ? action.Target : action.Value);
+        if (control.Sensitive || control.Name.Length == 0) return null;
+        var kind = action.Kind switch { "press_control" => "learned_press", "fill_field" => "learned_fill", "insert_field" => "learned_insert", _ => throw new ArgumentException("학습할 화면 동작을 확인하세요.") };
+        try { return ScreenLearning.Control(kind, new(observedApplication, control.Role, control.Name, control.Context, control.Operation, control.Editable, 0), kind == "learned_press" ? "" : action.Value); }
+        catch (ArgumentException) { return null; }
+    }
+    internal async Task<AssistantAction> PrepareReplayAsync(AssistantAction stored, CancellationToken token)
+    {
+        ScreenLearning.ValidateStored(stored); var selector = ScreenLearning.Selector(stored);
+        token.ThrowIfCancellationRequested(); observed.Clear();
+        var access = ScreenAccess.Mode; ScreenAccess.EnsureActive();
+        var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested(); ScreenAccess.Require(access);
+        observedAccess = access; observedWindow = snapshot.Window; observedApplication = snapshot.Application;
+        if (snapshot.Truncated || selector.Application.Length > 0 && !string.Equals(snapshot.Application, selector.Application, StringComparison.OrdinalIgnoreCase)) throw new AgentStoppedException("저장한 동작의 앱이나 화면 전체를 확인하지 못해 멈췄어요.");
+        bool Same(string actual, string expected) => expected.Length == 0 || string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+        var matches = snapshot.Controls.Where(x => (selector.Editable == null || x.Editable == selector.Editable) && Same(x.Name, selector.Name) && Same(x.Role, selector.Role) && Same(x.Context, selector.Context) && Same(x.Operation, selector.Operation) && (stored.Kind != "learned_press" || x.Operation.Length > 0)).ToArray();
+        var index = selector.Occurrence == 0 ? 0 : selector.Occurrence - 1;
+        if (selector.Occurrence == 0 && matches.Length != 1 || index >= matches.Length) throw new AgentStoppedException("저장한 이름·문맥의 화면 항목을 정확히 확인하지 못했어요. 현재 화면에서 다시 요청하세요.");
+        var control = matches[index];
+        if (control.Sensitive) throw new AgentStoppedException("암호 입력칸은 저장한 실행 방법으로 입력하지 않아요.");
+        var id = Guid.NewGuid().ToString("N"); observed[id] = control; expires = now().AddMinutes(2);
+        return stored.Kind switch
+        {
+            "learned_press" => new("press_control", id),
+            "learned_fill" => new("fill_field", stored.Value, Target: id),
+            "learned_insert" => new("insert_field", stored.Value, Target: id),
+            _ => throw new ArgumentException("저장한 화면 동작을 확인하세요.")
+        };
+    }
     public string Describe(AssistantAction action)
     {
         var control = Find(action.Kind is "fill_field" or "insert_field" ? action.Target : action.Value);
@@ -93,7 +125,7 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
     {
         if (action.Kind != "tap") throw new ArgumentException("이름으로 누를 버튼 요청이 필요해요.");
         token.ThrowIfCancellationRequested(); observed.Clear();
-        var access=ScreenAccess.Mode;ScreenAccess.EnsureActive();var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();ScreenAccess.Require(access);observedAccess=access; observedWindow = snapshot.Window;
+        var access=ScreenAccess.Mode;ScreenAccess.EnsureActive();var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();ScreenAccess.Require(access);observedAccess=access; observedWindow = snapshot.Window; observedApplication = snapshot.Application;
         if (snapshot.Truncated) throw new AgentStoppedException("버튼 목록 전체를 확인하지 못했어요. 목록에서 정확한 항목 ID로 요청해 주세요.");
         var matches = snapshot.Controls.Where(x => x.Operation == "invoke" && x.Role is "Button" or "Hyperlink" or "MenuItem")
             .Where(x => string.Equals(x.Name, action.Value, StringComparison.OrdinalIgnoreCase)).ToArray();

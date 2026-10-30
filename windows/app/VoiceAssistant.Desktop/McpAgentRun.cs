@@ -28,15 +28,15 @@ internal sealed class McpAgentRun(
             { token.ThrowIfCancellationRequested(); stopped = declined = true; stopReason = observations.Count == 0 ? "실행을 취소했어요." : "추가 실행을 취소했어요. 앞서 실행한 동작은 기록에 남아 있어요."; return new(true, "declined", stopReason); }
             token.ThrowIfCancellationRequested(); starting?.Invoke(step, action);
             var result = await execute(action, token);
-            return Record("succeeded", result.Summary, result.Data) with { Image = result.Image };
+            return Record("succeeded", result.Summary, result.Data, result.Replay, result.NoLearn) with { Image = result.Image };
         }
         catch (OperationCanceledException) { stopped = true; stopReason = "실행이 중단됐어요."; throw; }
         catch (AgentStoppedException ex) { stopped = true; stopReason = ex.Message; return Record("blocked", ex.Message); }
         catch (Exception ex) { return Record("failed", ex.Message); }
 
-        McpReply Record(string status, string summary, string? data = null)
+        McpReply Record(string status, string summary, string? data = null, AssistantAction? replay = null, bool noLearn = false)
         {
-            var item = new ActionObservation(step, step, action, status, summary, data);
+            var item = new ActionObservation(step, step, action, status, summary, data, replay, noLearn);
             observations.Add(item); observed?.Invoke(item); return new(status != "succeeded", status, summary, data);
         }
     }
