@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
@@ -18,6 +19,7 @@ public sealed partial class PersonalWindow : Window
     readonly TextBox name = Field(UiText.Get("호출 문장 또는 루틴 이름")), body = Field(UiText.Get("기억 내용 또는 답변"), true), command = Field(UiText.Get("추가할 동작 명령"));
     readonly TextBlock nameLabel = Label(UiText.Get("호출 문장")), bodyLabel = Label(UiText.Get("기억할 내용")), status = new() { TextWrapping = TextWrapping.Wrap, LineHeight = 21 };
     readonly StackPanel actionPanel = new();
+    readonly TextBlock learningInfo = new() { Foreground = Brushes.SlateGray, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,6,0,4) };
     readonly ObservableCollection<Step> draft = new();
     readonly Button save, remove, undo;
     PersonalState view = new();
@@ -44,7 +46,7 @@ public sealed partial class PersonalWindow : Window
         var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(225) }); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) }); grid.ColumnDefinitions.Add(new ColumnDefinition()); root.Children.Add(grid);
         var left = new DockPanel(); var add = Button(UiText.Get("새 항목"), (_,_) => { entries.SelectedItem = null; Fill(); }); DockPanel.SetDock(add, Dock.Top); left.Children.Add(add);
         AutomationProperties.SetName(entries, UiText.Get("저장 항목 목록")); entries.SelectionChanged += (_,_) => Fill(); left.Children.Add(entries); grid.Children.Add(left);
-        var editor = new StackPanel(); editor.Children.Add(nameLabel); editor.Children.Add(name); editor.Children.Add(bodyLabel); editor.Children.Add(body);
+        var editor = new StackPanel(); editor.Children.Add(nameLabel); editor.Children.Add(name); editor.Children.Add(bodyLabel); editor.Children.Add(body); editor.Children.Add(learningInfo);
         actionPanel.Children.Add(Label(UiText.Get("실행할 동작 · 위에서 아래 순서"))); steps.ItemsSource = draft; AutomationProperties.SetName(steps, UiText.Get("실행 동작 목록")); actionPanel.Children.Add(steps);
         var order = new WrapPanel { Margin = new Thickness(0,7,0,0) };
         order.Children.Add(Button(UiText.Get("위로"), (_,_) => Move(-1))); order.Children.Add(Button(UiText.Get("아래로"), (_,_) => Move(1))); order.Children.Add(Button(UiText.Get("동작 빼기"), (_,_) => { if (steps.SelectedItem is Step step) draft.Remove(step); })); actionPanel.Children.Add(order);
@@ -68,7 +70,7 @@ public sealed partial class PersonalWindow : Window
         view = store.Snapshot(); revision = store.Version;
         entries.ItemsSource = Kind switch { "routines" => view.Routines.Keys.Select(x => new Entry(x, x)).ToArray(), "learned" => view.Learned.Keys.Select(x => new Entry(x, x)).ToArray(), _ => view.Notes.Select((x,i) => new Entry(i.ToString(), x.Length > 70 ? x[..70] + "…" : x)).ToArray() };
         entries.SelectedItem = entries.Items.OfType<Entry>().FirstOrDefault(x => x.Key == selected); Fill();
-        status.Text = store.Error ?? UiText.Format("저장 항목 {0}개 · 현재 목록을 기준으로 편집합니다.",entries.Items.Count); status.Foreground = store.Error == null ? Brushes.SlateGray : Brushes.Firebrick;
+        status.Text = store.Error ?? UiText.Format("저장 항목 {0}개 · 이 PC의 배운 방법 실행 {1}회",entries.Items.Count,view.FastHits); status.Foreground = store.Error == null ? Brushes.SlateGray : Brushes.Firebrick;
         save.IsEnabled = store.Error == null; undo.IsEnabled = previous != null && undoVersion == store.Version;
     }
     void Fill()
@@ -79,11 +81,13 @@ public sealed partial class PersonalWindow : Window
         actionPanel.Visibility = note ? Visibility.Collapsed : Visibility.Visible;
         nameLabel.Text = Kind == "routines" ? UiText.Get("루틴 이름") : UiText.Get("호출 문장"); bodyLabel.Text = note ? UiText.Get("기억할 내용") : UiText.Get("실행 후 답변");
         name.Text = selected?.Key ?? ""; body.Text = ""; command.Text = ""; draft.Clear();
+        learningInfo.Visibility = Kind == "learned" && selected != null ? Visibility.Visible : Visibility.Collapsed;
+        learningInfo.Text = "";
         if (selected != null)
         {
             if (note) body.Text = view.Notes[int.Parse(selected.Key)];
             else if (Kind == "routines") foreach (var action in view.Routines[selected.Key]) draft.Add(new(action));
-            else { var plan = view.Learned[selected.Key]; body.Text = plan.Reply; foreach (var action in plan.Actions) draft.Add(new(action)); }
+            else { var plan = view.Learned[selected.Key]; body.Text = plan.Reply; foreach (var action in plan.Actions) draft.Add(new(action)); var info = view.MacLearning.GetValueOrDefault(selected.Key); learningInfo.Text = UiText.Format("이 방법 사용 {0}회 · {1}",info?.Uses ?? 0,UiText.Get(info?.Automatic == true ? info.Uses == 0 ? "30일 내 한 번도 안 쓰면 정리" : "사용 기록이 있어 자동 정리 안 함" : "직접 관리하는 학습")); }
         }
         remove.IsEnabled = selected != null && store.Error == null;
     }

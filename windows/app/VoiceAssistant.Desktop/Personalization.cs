@@ -13,10 +13,11 @@ public sealed record PersonalState
     public Dictionary<string, CommandPlan> Learned { get; set; } = new();
     public List<string> Notes { get; set; } = new();
     public Dictionary<string, MacLearningInfo> MacLearning { get; set; } = new();
+    public long FastHits { get; set; }
 }
-public sealed record MacLearningInfo(long Uses, double Learned);
+public sealed record MacLearningInfo(long Uses, double Learned, bool Automatic = false);
 
-public sealed class Personalization
+public sealed partial class Personalization
 {
     PersonalState state = new(); string lastLearned = ""; readonly string FilePath; string knownStamp = "missing";
     public string? Error { get; private set; }
@@ -25,8 +26,9 @@ public sealed class Personalization
     internal string StoragePath => FilePath;
     internal string BackupPath => FilePath + ".backup";
     static readonly HashSet<string> Reusable = new() { "display_off", "open_app", "open_url", "volume", "volume_delta", "media", "browser", "timer", "cancel_timers", "youtube_play", "youtube_search" };
-    public Personalization(string? file = null)
+    public Personalization(string? file = null, Func<DateTimeOffset>? clock = null)
     {
+        this.clock = clock ?? (() => DateTimeOffset.UtcNow);
         FilePath = file ?? Path.Combine(AppPaths.Home, "personal.json");
         if (!File.Exists(FilePath)) return;
         try { var text = DataFileStamp.ReadText(FilePath, out var loadedStamp); var loaded = JsonSerializer.Deserialize<PersonalState>(text, SettingsStore.Json) ?? throw new JsonException(); ValidateState(loaded); knownStamp = loadedStamp; state = loaded; }
@@ -38,18 +40,18 @@ public sealed class Personalization
     internal void Reload()
     {
         if (Error == null && DataFileStamp.Read(FilePath) == knownStamp) return;
-        var loaded = new Personalization(FilePath);
+        var loaded = new Personalization(FilePath, clock);
         if (loaded.Error != null) throw new InvalidOperationException(loaded.Error);
-        state = loaded.state; knownStamp = loaded.knownStamp; Error = null; lastLearned = ""; Version++;
+        state = loaded.state; knownStamp = loaded.knownStamp; Error = null; ClearRecentLearning(); Version++;
     }
     internal void ApplySnapshot(PersonalState next, int expectedVersion, string expectedStamp)
     {
         RequireVersion(expectedVersion); DataFileStamp.Require(FilePath, expectedStamp); ValidateState(next);
-        Update(s => { var copy = Copy(next); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; s.MacLearning = copy.MacLearning; }); lastLearned = "";
+        Update(s => { var copy = Copy(next); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; s.MacLearning = copy.MacLearning; s.FastHits = copy.FastHits; }); ClearRecentLearning();
     }
     static void ValidateState(PersonalState value)
     {
-        if (value.Routines == null || value.Learned == null || value.Notes == null || value.MacLearning == null || value.MacLearning.Count > 1000 || value.MacLearning.Any(x => !value.Learned.ContainsKey(x.Key) || x.Value == null || x.Value.Uses < 0 || !double.IsFinite(x.Value.Learned)) || value.Routines.Count > 1000 || value.Learned.Count > 1000 || value.Notes.Count > 1000 || value.Notes.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 4000)) throw new JsonException("Invalid personal data");
+        if (value.FastHits < 0 || value.Routines == null || value.Learned == null || value.Notes == null || value.MacLearning == null || value.MacLearning.Count > 1000 || value.MacLearning.Any(x => !value.Learned.ContainsKey(x.Key) || x.Value == null || x.Value.Uses < 0 || !double.IsFinite(x.Value.Learned)) || value.Routines.Count > 1000 || value.Learned.Count > 1000 || value.Notes.Count > 1000 || value.Notes.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 4000)) throw new JsonException("Invalid personal data");
         void Actions(IReadOnlyCollection<AssistantAction>? actions) { if (actions == null || actions.Count is < 1 or > 8 || !CanReuse(actions)) throw new JsonException("Invalid stored actions"); }
         foreach (var row in value.Routines) { if (string.IsNullOrWhiteSpace(row.Key) || row.Key.Length > 30) throw new JsonException(); Actions(row.Value); }
         foreach (var row in value.Learned) { if (string.IsNullOrWhiteSpace(row.Key) || row.Key.Length > 6000 || row.Value == null || row.Value.Reply == null || row.Value.Reply.Length > 12000) throw new JsonException(); Actions(row.Value.Actions?.ToArray()); }
@@ -83,7 +85,7 @@ public sealed class Personalization
     }
     void RequireVersion(int expected) { if (expected != Version) throw new InvalidOperationException("다른 명령으로 저장 내용이 바뀌었어요. 새로고침 후 다시 선택하세요."); }
     public void Restore(PersonalState previous, int expectedVersion)
-    { RequireVersion(expectedVersion); Update(s => { var copy = Copy(previous); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; s.MacLearning = copy.MacLearning; }); lastLearned = ""; }
+    { RequireVersion(expectedVersion); Update(s => { var copy = Copy(previous); s.Notes = copy.Notes; s.Routines = copy.Routines; s.Learned = copy.Learned; s.MacLearning = copy.MacLearning; s.FastHits = copy.FastHits; }); ClearRecentLearning(); }
     static string Key(string text) => CommandParser.Normalize(text).Replace(" ", "").ToUpperInvariant();
     public void SaveNote(int? index, string text, int expectedVersion)
     {
@@ -113,7 +115,7 @@ public sealed class Personalization
         if (original != null && !state.Learned.ContainsKey(original)) throw new InvalidOperationException("수정할 학습 내용을 다시 선택하세요.");
         if (state.Learned.Keys.Any(x => x != original && Key(x) == Key(phrase))) throw new ArgumentException("같은 호출 문장이 있어요.");
         var list = ValidActions(actions);
-        Update(s => { MacLearningInfo? info = null; if (original != null) { s.Learned.Remove(original); if (s.MacLearning.Remove(original, out var saved)) info = saved; } if (s.Learned.Count >= 100) throw new ArgumentException("배운 실행 방법은 최대 100개입니다."); s.Learned[phrase] = new(reply, list); if (info != null) s.MacLearning[phrase] = info; });
+        Update(s => { MacLearningInfo? info = null; if (original != null) { s.Learned.Remove(original); if (s.MacLearning.Remove(original, out var saved)) info = saved; } if (s.Learned.Count >= 100) throw new ArgumentException("배운 실행 방법은 최대 100개입니다."); s.Learned[phrase] = new(reply, list); s.MacLearning[phrase] = info is null ? new(0, LearningTime) : info with { Automatic = false }; });
     }
     public void Remove(string category, string key, int expectedVersion)
     {
@@ -125,7 +127,7 @@ public sealed class Personalization
             else if (category == "learned" && s.Learned.Remove(key)) { s.MacLearning.Remove(key); }
             else throw new ArgumentException("삭제할 항목을 다시 선택하세요.");
         });
-        if (category == "learned" && lastLearned == key) lastLearned = "";
+        if (category == "learned" && lastLearned == key) ClearRecentLearning();
     }
     public static CommandPlan ParseStep(string command)
     {
@@ -158,10 +160,11 @@ public sealed class Personalization
         var text = CommandParser.Normalize(input); var compact = text.Replace(" ", "");
         if (compact is "기억보여줘" or "기억목록" or "뭘기억하고있어") return Answer(Error ?? (state.Notes.Count == 0 ? "저장한 기억이 없어요." : string.Join("\n", state.Notes.Select((n, i) => $"{i + 1}. {n}"))));
         if (compact is "루틴목록" or "내루틴" or "루틴보여줘") return Answer(Error ?? (state.Routines.Count == 0 ? "저장한 루틴이 없어요." : "등록한 루틴: " + string.Join(", ", state.Routines.Keys)));
-        if (compact is "아니" or "그게아니야")
+        if (compact is "아니" or "그게아니야" or "틀렸어")
         {
-            if (lastLearned.Length == 0) return Answer("어떻게 바꿀지 말씀해 주세요.");
-            var key = lastLearned; Update(s => { s.Learned.Remove(key); s.MacLearning.Remove(key); }); lastLearned = ""; return Answer("방금 배운 실행 방법을 지웠어요. 어떻게 바꿀지 말씀해 주세요.");
+            if (lastLearned.Length == 0) return Answer(UiText.Get("어떻게 바꿀지 말씀해 주세요."));
+            if (lastLearnedPlan == null || !state.Learned.TryGetValue(lastLearned, out var recent) || !SameLearning(recent, lastLearnedPlan)) { ClearRecentLearning(); return Answer(UiText.Get("학습 내용이 바뀌어 삭제하지 않았어요. 관리 화면에서 확인해 주세요.")); }
+            var key = lastLearned; Update(s => { s.Learned.Remove(key); s.MacLearning.Remove(key); }); ClearRecentLearning(); return Answer(UiText.Get("방금 배운 실행 방법을 지웠어요. 어떻게 바꿀지 말씀해 주세요."));
         }
         Match m;
         if ((m = Regex.Match(text, @"^기억해(?:줘)?\s*[:：,]?\s*(.+)$")).Success) return new("기억했어요.", new[] { new AssistantAction("remember", m.Groups[1].Value) });
@@ -213,7 +216,8 @@ public sealed class Personalization
         if (Error != null || CommandParser.RequiresObservations(text) || !CanReuse(plan.Actions) || ScreenLearning.HasScreenSteps(plan.Actions) && Key(text).Length < 4) return;
         var normalized = CommandParser.Normalize(text); var matches = state.Learned.Keys.Where(x => Key(x) == Key(normalized)).Take(2).ToArray();
         var key = state.Learned.ContainsKey(normalized) ? normalized : matches.Length == 1 ? matches[0] : normalized;
-        Update(s => { s.Learned[key] = plan; while (s.Learned.Count > 100) { var oldest = s.Learned.Keys.First(); s.Learned.Remove(oldest); s.MacLearning.Remove(oldest); } }); lastLearned = key;
+        var owned = CopyLearning(plan);
+        Update(s => { s.Learned[key] = owned; s.MacLearning[key] = new(0, LearningTime, Automatic: true); while (s.Learned.Count > 100) { var oldest = s.Learned.Keys.First(); s.Learned.Remove(oldest); s.MacLearning.Remove(oldest); } }); lastLearned = key; lastLearnedPlan = CopyLearning(owned);
     }
     string? RoutineMatch(string text)
     {

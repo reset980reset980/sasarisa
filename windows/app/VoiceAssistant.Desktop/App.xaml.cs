@@ -100,6 +100,7 @@ public partial class App : System.Windows.Application
         showWait = ThreadPool.RegisterWaitForSingleObject(showEvent, (_, _) => Dispatcher.BeginInvoke(window.ShowApp), null, Timeout.Infinite, false);
         quitWait = ThreadPool.RegisterWaitForSingleObject(quitEvent, (_, _) => Dispatcher.BeginInvoke(Quit), null, Timeout.Infinite, false);
         window.LoadSettings(settings);
+        PruneAutomaticLearning();
         overlay.Configure(settings.Desktop);
         window.CommandSubmitted += text => _ = SubmitAsync(text, false);
         window.FreeModeAnswered += SubmitFreeModeAnswer;
@@ -416,10 +417,14 @@ public partial class App : System.Windows.Application
             }
             parsed = ResolveWithShared(text, parsed, out var sharedUsed);
             if (parsed?.Actions.FirstOrDefault()?.Kind == "stop") { StopTurn(); window.AddMessage("assistant", StopReply); return; }
+            var learnedInvocation = parsed == null ? null : personal.PrepareInvocation(text, parsed);
+            if (learnedInvocation != null && !personal.ActivateInvocation(learnedInvocation)) throw new AgentStoppedException("저장한 실행 방법이 바뀌었어요. 다시 요청하세요.");
             if (parsed != null && ScreenLearning.HasScreenSteps(parsed.Actions))
             {
                 var replayed = await RunAiAsync(text, "", token, parsed);
                 token.ThrowIfCancellationRequested(); if (!replayed.Finished) offerAfterTurn = null;
+                if (replayed.Finished && learnedInvocation != null) RecordLearnedExecution(learnedInvocation);
+                learnedInvocation = null;
                 parsed = new(replayed.Reply, Array.Empty<AssistantAction>());
             }
             if (parsed == null)
@@ -480,6 +485,7 @@ public partial class App : System.Windows.Application
                 if (!approved) { window.AddMessage("assistant", "실행을 취소했어요."); return; }
             }
             foreach (var action in parsed.Actions) { token.ThrowIfCancellationRequested(); var result=await ExecuteAsync(action, token, localKeyTarget, localKeyFocus, localButton); if (confirmedEffects.TryGetValue(action, out var confirmedEffect)) ConfirmedExecutionSucceeded(confirmedEffect, token); if(result!=null&&parsed.Actions.Count==1)parsed=parsed with{Reply=result};AppPaths.Log("action", JsonSerializer.Serialize(action)); }
+            if (learnedInvocation != null) RecordLearnedExecution(learnedInvocation);
             if (sharedUsed != null && RemoteExecution.Current == null) lastShared = (sharedUsed, DateTimeOffset.UtcNow);
             window.AddMessage("assistant", parsed.Reply); overlay.SetContent(settings.Name, parsed.Reply, false); if (greetingWindow == null) overlay.ShowOverlay(); overlayUntil = DateTimeOffset.Now.AddSeconds(8); AppPaths.Log("reply", parsed.Reply);
             await SayAsync(parsed.Reply, token);

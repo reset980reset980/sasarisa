@@ -13,6 +13,12 @@ public static class Checks
     public static async Task<int> RunAsync(string[] args)
     {
         var rows = new List<object>(); var failed = 0;
+        if (args.Contains("--learning-lifecycle-only"))
+        {
+            failed = await LearningLifecycleChecks.RunAsync(rows);
+            var report = Path.Combine(AppPaths.Home, "learning-lifecycle-checks.json"); Directory.CreateDirectory(AppPaths.Home);
+            File.WriteAllText(report, JsonSerializer.Serialize(new { total = rows.Count, failed, microphoneCapture = false, speakerPlayback = false, visibleWindows = false, realAppExecution = false, checks = rows }, SettingsStore.Json)); return failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--screen-learning-only"))
         {
             failed = await ScreenLearningChecks.RunAsync(rows);
@@ -410,6 +416,7 @@ public static class Checks
         failed += BrainAccessChecks.Run(rows);
         failed += await ScreenAccessChecks.RunAsync(rows);
         failed += await ScreenLearningChecks.RunAsync(rows);
+        failed += await LearningLifecycleChecks.RunAsync(rows);
         failed += InputDeviceChecks.Run(rows);
         failed += await ConversationLanguageChecks.RunAsync(rows);
         failed += await ExecutionConsentChecks.RunAsync(rows);

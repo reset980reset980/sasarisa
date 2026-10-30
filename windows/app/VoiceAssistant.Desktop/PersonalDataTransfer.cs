@@ -56,8 +56,8 @@ public static class PersonalDataTransfer
     }
     internal static void ValidateState(PersonalState state, ISet<string> appIds, bool allowMissingApps = false)
     {
-        if (state == null || state.Notes == null || state.Routines == null || state.Learned == null || state.MacLearning == null || state.MacLearning.Count > 1000 || state.Notes.Count > 1000 || state.Routines.Count > 1000 || state.Learned.Count > 1000) throw new ArgumentException(UiText.Get("개인 데이터의 종류나 개수가 올바르지 않아요."));
-        foreach (var info in state.MacLearning) if (!state.Learned.ContainsKey(info.Key) || info.Value == null || info.Value.Uses < 0 || !double.IsFinite(info.Value.Learned)) throw new ArgumentException(UiText.Get("Mac 학습 기록의 호출 문장·횟수·시각을 확인하세요."));
+        if (state == null || state.FastHits < 0 || state.Notes == null || state.Routines == null || state.Learned == null || state.MacLearning == null || state.MacLearning.Count > 1000 || state.Notes.Count > 1000 || state.Routines.Count > 1000 || state.Learned.Count > 1000) throw new ArgumentException(UiText.Get("개인 데이터의 종류나 개수가 올바르지 않아요."));
+        foreach (var info in state.MacLearning) if (!state.Learned.ContainsKey(info.Key) || info.Value == null || info.Value.Uses < 0 || !double.IsFinite(info.Value.Learned)) throw new ArgumentException(UiText.Get("학습 기록의 호출 문장·횟수·시각을 확인하세요."));
         foreach (var note in state.Notes) if (string.IsNullOrWhiteSpace(note) || note.Length > 4000 || note.Contains('\0')) throw new ArgumentException(UiText.Get("기억할 내용은 1~4,000자로 작성하세요."));
         if (state.Routines.Keys.Select(Key).Distinct().Count() != state.Routines.Count || state.Learned.Keys.Select(Key).Distinct().Count() != state.Learned.Count) throw new ArgumentException(UiText.Get("같은 호출 이름을 가진 항목이 여러 개예요."));
         foreach (var row in state.Routines) { Name(row.Key, 30); ValidateActions(row.Value, appIds, allowMissingApps); }
@@ -163,12 +163,12 @@ public static class PersonalDataTransfer
             var key = next.Learned.Keys.FirstOrDefault(x => Key(x) == Key(row.Key));
             if (key != null && !options.ReplaceConflicts) { skipped++; lines.Add(UiText.Get("기존 배운 말 유지 · ") + key); continue; }
             var actions = Map(UiText.Get("배운 말 ‘") + row.Key + "’", row.Value.Actions); if (actions == null) continue;
-            var sourceInfo = package.Personal.MacLearning.GetValueOrDefault(row.Key);
+            var sourceInfo = package.Personal.MacLearning.GetValueOrDefault(row.Key) is { } importedInfo ? importedInfo with { Automatic = false } : null;
             if (key != null && next.Learned[key].Reply == row.Value.Reply && next.Learned[key].Actions.SequenceEqual(actions) && (sourceInfo == null || next.MacLearning.GetValueOrDefault(key) == sourceInfo)) { skipped++; lines.Add(UiText.Get("같은 배운 말 유지 · ") + key); continue; }
             next.Learned[key ?? row.Key] = row.Value with { Actions = actions }; if (key == null) added++; else replaced++;
             if (sourceInfo != null) next.MacLearning[key ?? row.Key] = sourceInfo;
             lines.Add((key == null ? UiText.Get("배운 말 추가 · ") : UiText.Get("배운 말 교체 · ")) + row.Key + "\n  " + string.Join("\n  ", actions.Select(x => Describe(x, apps))));
-            if (sourceInfo != null) lines.Add(UiText.Get("  Mac에서 사용 ") + sourceInfo.Uses + UiText.Get("회 · 원본 학습 시각 보존"));
+            if (sourceInfo != null) lines.Add(UiText.Format("  사용 {0}회 · 원본 학습 시각 보존",sourceInfo.Uses));
         }
         if (next.Notes.Count > 1000 || next.Routines.Count > 1000 || next.Learned.Count > 1000) blocked.Add(UiText.Get("각 종류는 최대 1,000개까지 보관할 수 있어요."));
         return new(next, UiText.Format("추가 {0}개 · 교체 {1}개 · 기존 유지/중복 {2}개\n",added,replaced,skipped) + (lines.Count == 0 ? UiText.Get("바뀌는 항목이 없어요.") : string.Join("\n", lines)), blocked.ToArray(), added, replaced, skipped);

@@ -75,10 +75,10 @@ internal static class ScreenLearningChecks
             var stored = controls.LearningAction(action)!;
             driver.Snapshot = driver.Snapshot with { Controls = new[] { Button("new-button"), Field("new-field") } };
             var approvals = 0;
-            var result = await ScreenLearning.ReplayAsync(new("old reply", new[] { stored }), controls.PrepareReplayAsync,
+            var result = await ScreenLearning.ReplayAsync(new("custom confirmation", new[] { stored }), controls.PrepareReplayAsync,
                 (current, token) => { approvals++; Require(controls.Describe(current).Contains("새 한글 본문"), "Actual target/text missing from approval"); return Task.FromResult(true); },
                 async (current, token) => { await controls.FillAsync(current.Target, current.Value, token); return new("actual new result"); }, null, null, CancellationToken.None);
-            Require(result.Finished && approvals == 1 && result.Reply == "actual new result" && driver.Writes.Single().StartsWith("new-field:") && result.LearningPlan == null, "Replay used old identity, cached reply, skipped confirmation or relearned itself");
+            Require(result.Finished && approvals == 1 && result.Reply == "custom confirmation" && result.Observations.Single().Summary == "actual new result" && driver.Writes.Single().StartsWith("new-field:") && result.LearningPlan == null, "Replay lost custom reply or actual observation, used old identity, skipped confirmation or relearned itself");
         });
         await Check("Screen learning blocks ambiguous missing changed-app and incomplete snapshots without input", async () =>
         {

@@ -48,6 +48,7 @@ public partial class App
     CommandPlan? ResolveWithShared(string text, CommandPlan? known, out SharedPair? used)
     {
         used = null;
+        personal.BeginLearningCommand(text);
         var local = RemoteExecution.Current == null;
         if (local && lastShared is { } recent && DateTimeOffset.UtcNow - recent.At < TimeSpan.FromSeconds(30) &&
             SharedCommands.Key(text) is "아니" or "그게아니야" or "틀렸어")

@@ -117,6 +117,6 @@ internal static class ScreenLearning
                 return new($"{step}번째 저장 동작에서 멈췄어요. 앞선 동작을 반복하지 않았어요. {ex.Message}", observations.ToArray(), false);
             }
         }
-        return new(string.Join("\n", observations.Select(x => x.Summary)), observations.ToArray(), true);
+        return new(string.IsNullOrWhiteSpace(plan.Reply) ? UiText.Format("저장한 실행 방법대로 동작 {0}개를 처리했어요. 각 단계의 결과는 실행 기록에서 확인하세요.",observations.Count) : plan.Reply, observations.ToArray(), true);
     }
 }

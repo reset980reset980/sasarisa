@@ -109,7 +109,7 @@ internal static class UiLanguageAppChecks
             });
             Check("Personal-data editor and import review localize controls without translating or applying personal content",()=>
             {
-                UiText.Apply("en");var store=new Personalization(Path.Combine(AppPaths.Home,"ui-personal.json"));var apps=new AppRegistry(Path.Combine(AppPaths.Home,"ui-apps.json"));
+                UiText.Apply("en");var fixture=Path.Combine(AppPaths.Home,"ui-personal-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(fixture);var store=new Personalization(Path.Combine(fixture,"personal.json"));var apps=new AppRegistry(Path.Combine(fixture,"apps.json"));
                 store.SaveNote(null,"설정",store.Version);store.SaveLearned("설정","대화",new[]{new AssistantAction("learned_type","사용자 문장")},null,store.Version);var before=File.ReadAllBytes(store.StoragePath);
                 var editor=Track(new PersonalWindow(store));Require(editor.Title=="Manage memory, routines and learned actions","Personal editor title missing");
                 Require(Children<ComboBox>(editor).SelectMany(x=>x.Items.OfType<DeviceOption>()).Any(x=>x.Id=="notes" && x.Label=="Memories"),"Category IDs or labels changed");
