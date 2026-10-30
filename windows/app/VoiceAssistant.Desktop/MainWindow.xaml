@@ -237,10 +237,10 @@
                                     <TextBlock Text="{DynamicResource Ui.C23053668C5663BF24ADADB3}" Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,0" />
                                 </StackPanel>
                                 <StackPanel x:Name="BrainAccessFields" Visibility="Collapsed" Margin="0,17,0,0">
-                                    <TextBlock Text="{DynamicResource Ui.FFF6A37420BA01D9D235B4CF}" Style="{StaticResource FieldLabel}" />
-                                    <ComboBox x:Name="BrainAccessInput" SelectedIndex="0" SelectionChanged="BrainAccess_SelectionChanged" AutomationProperties.Name="{DynamicResource Ui.FFF6A37420BA01D9D235B4CF}">
-                                        <ComboBoxItem Content="{DynamicResource Ui.4C0EECF4309623EFB4FB4EB4}" Tag="safe" />
-                                        <ComboBoxItem Content="{DynamicResource Ui.2DB2225BB7B449521E3E477A}" Tag="full" />
+                                    <TextBlock Text="{DynamicResource Ui.B06A6FFB41852D2C0BF840A7}" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox x:Name="BrainAccessInput" SelectedIndex="0" SelectionChanged="BrainAccess_SelectionChanged" AutomationProperties.Name="{DynamicResource Ui.B06A6FFB41852D2C0BF840A7}">
+                                        <ComboBoxItem Content="{DynamicResource Ui.4346B4212BBD7D5F0E2930B8}" Tag="safe" />
+                                        <ComboBoxItem Content="{DynamicResource Ui.FC30506CFC7D7D249F158EDC}" Tag="full" />
                                     </ComboBox>
                                     <TextBlock x:Name="BrainAccessHelp" Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,0" />
                                 </StackPanel>

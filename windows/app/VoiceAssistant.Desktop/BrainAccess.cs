@@ -11,19 +11,19 @@ internal static class BrainAccess
     internal const string FullTools = "Bash,Read,Glob,Grep,WebSearch,WebFetch";
     internal static void Validate(string access)
     {
-        if (access is not ("safe" or "full")) throw new ArgumentException(UiText.Get("Claude 작업 권한은 제한 또는 전체 중에서 선택하세요."));
+        if (access is not ("safe" or "full")) throw new ArgumentException(UiText.Get("AI 작업 권한은 제한 또는 전체 중에서 선택하세요."));
     }
     internal static string Label(string access)
     {
         Validate(access);
-        return UiText.Get(access == "full" ? "전체 권한 · 명령·파일·웹" : "제한 권한 · 비서 도구와 웹 검색");
+        return UiText.Get(access == "full" ? "전체 권한 · 보호 앱과 암호 입력" : "제한 권한 · 일반 화면 작업");
     }
     internal static string Help(string access)
     {
         Validate(access);
         return UiText.Get(access == "full"
-            ? "Claude가 명령 실행·파일 조회/변경·웹 접속을 직접 할 수 있습니다. 이 자체 도구의 작업에는 비서의 실행 확인과 되돌리기가 적용되지 않습니다. 설정 저장 후 Claude 및 조합의 Claude 요청(휴대폰 포함)에 적용합니다. Codex·Aside·API와 받아쓰기/글 다듬기에는 적용하지 않습니다."
-            : "원본처럼 비서의 화면 도구와 웹 검색만 허용합니다. Claude 자체의 명령 실행·파일 접근·웹 주소 직접 읽기는 허용하지 않습니다. 비서 화면 도구는 선택한 실행 확인 방식을 따릅니다. 설정 저장 후 적용합니다.");
+            ? "비서 화면 도구로 터미널·개발 도구 등 보호 앱과 암호 칸에도 입력할 수 있습니다. 암호 내용은 읽거나 자동으로 되돌리지 않습니다. Claude는 명령·파일·웹 도구도 직접 사용하며 자체 도구에는 비서의 확인·되돌리기가 적용되지 않습니다. 비서 화면 도구의 대상 확인·취소·실행 확인은 유지합니다. 저장 후 휴대폰 요청에도 적용합니다. Aside 자체 도구의 권한과 글 다듬기의 도구 차단은 바꾸지 않습니다."
+            : "보호 앱과 암호 칸의 비서 화면 조작을 차단하고 일반 글 입력의 줄바꿈은 공백으로 전달합니다. Claude는 비서 MCP와 웹 검색만 사용하며 자체 명령·파일·웹 주소 읽기는 허용하지 않습니다. 비서 화면 도구는 선택한 실행 확인 방식을 따릅니다. 저장 후 적용합니다.");
     }
     internal static string Prompt(string access)
     {

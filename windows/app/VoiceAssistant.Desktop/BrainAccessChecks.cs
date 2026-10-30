@@ -55,7 +55,7 @@ internal static class BrainAccessChecks
                     var selected=SettingsTransfer.Prepare(incoming,current,connection,devices,true);Require(selected.BrainAccess==incoming.BrainAccess && !selected.Speak && selected.Desktop.StartupListening=="off","Explicit import lost access or changed audio preference");
                 }
                 Require(SettingsTransfer.Copy(incoming).BrainAccess==incoming.BrainAccess && JsonSerializer.Serialize(current)==original,"Import/copy mutated source");
-                Require(SettingsTransfer.Describe(current,incoming).Contains("Claude 작업 권한"),"Review hid permission change");
+                Require(SettingsTransfer.Describe(current,incoming).Contains("AI 작업 권한"),"Review hid permission change");
             }
         });
         Check("Mac safe and full values are converted but omitted access and rejected values preserve the Windows profile",()=>

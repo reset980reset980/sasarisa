@@ -35,16 +35,16 @@ internal static class BrainAccessAppChecks
             Check("Hidden Claude permission editor defaults safe and selecting full changes only the draft",()=>
             {
                 Require(Tag(input)=="safe" && section.Visibility==Visibility.Visible && help.Text.Contains("웹 검색"),"Default permission or help missing");var before=File.ReadAllBytes(AppPaths.ConfigFile);Select(input,"full");
-                Require(help.Text.Contains("휴대폰 포함") && help.Text.Contains("되돌리기") && SettingsStore.Load().BrainAccess=="safe" && saves==0 && File.ReadAllBytes(AppPaths.ConfigFile).SequenceEqual(before),"Draft silently applied authority");
+                Require(help.Text.Contains("휴대폰 요청") && help.Text.Contains("되돌리기") && SettingsStore.Load().BrainAccess=="safe" && saves==0 && File.ReadAllBytes(AppPaths.ConfigFile).SequenceEqual(before),"Draft silently applied authority");
             });
             Check("Saving full and safe permission uses actual settings persistence and backups without enabling speech",()=>
             {
                 foreach(var value in new[]{"full","safe","full"}){var before=File.ReadAllBytes(AppPaths.ConfigFile);Select(input,value);view.SaveSettingsForCheck();Require(SettingsStore.Load().BrainAccess==value && File.ReadAllBytes(AppPaths.ConfigFile+".backup").SequenceEqual(before),"Saved permission or backup lost");}
                 Require(saves==3 && !current.Speak && current.Desktop.StartupListening=="off" && current.Name=="설정","Permission changed unrelated settings");
             });
-            Check("Switching AI providers hides unsupported permission controls while retaining the saved Claude choice",()=>
+            Check("Switching AI providers retains the saved shared screen permission",()=>
             {
-                foreach(var id in new[]{"codex","ollama","aside","combo","claude"}){Select(provider,id);Require(section.Visibility==(id is "claude" or "combo"?Visibility.Visible:Visibility.Collapsed) && Tag(input)=="full","Provider switch changed permission");}
+                foreach(var id in new[]{"codex","ollama","aside","combo","claude"}){Select(provider,id);Require(section.Visibility==(Visibility.Visible) && Tag(input)=="full","Provider switch changed permission");}
                 Select(provider,"codex");view.SaveSettingsForCheck();Require(SettingsStore.Load().BrainAccess=="full","Saving Codex erased Claude permission");Select(provider,"claude");
             });
             Check("Invalid and rejected permission saves preserve both current settings and backup",()=>
@@ -60,14 +60,14 @@ internal static class BrainAccessAppChecks
             {
                 var saved=SettingsStore.Load();var safe=saved with{BrainAccess="safe"};var imported=mac?MacSettingsTransfer.Parse("{\"brainAccess\":\"full\"}",safe).Settings:safe with{BrainAccess="full"};
                 var review=new SettingsImportWindow(imported,safe,null,!mac);windows.Add(review);var before=File.ReadAllBytes(AppPaths.ConfigFile);
-                Require(!review.ChangeDescription.Contains("Claude 작업 권한") && review.Result==null,"Permission change applied by default");review.SelectConnections(true);Require(!review.ChangeDescription.Contains("Claude 작업 권한"),"Connection import granted permission");
-                review.SelectPermissions(true);Require(review.ChangeDescription.Contains("Claude 작업 권한") && review.ChangeDescription.Contains("전체 권한"),"Review hid full access");var selected=review.AcceptSelection();
+                Require(!review.ChangeDescription.Contains("AI 작업 권한") && review.Result==null,"Permission change applied by default");review.SelectConnections(true);Require(!review.ChangeDescription.Contains("AI 작업 권한"),"Connection import granted permission");
+                review.SelectPermissions(true);Require(review.ChangeDescription.Contains("AI 작업 권한") && review.ChangeDescription.Contains("전체 권한"),"Review hid full access");var selected=review.AcceptSelection();
                 Require(selected.BrainAccess=="full" && selected.Device==safe.Device && selected.Desktop.StartupListening==safe.Desktop.StartupListening && File.ReadAllBytes(AppPaths.ConfigFile).SequenceEqual(before),"Review applied data before the caller saved");
             }
             Check("English permission labels keep safe and full tags and preserve user names",()=>
             {
-                view.LoadSettings(current with{BrainProvider="claude",Language="en"});Require(AutomationProperties.GetName(input)=="Claude tool access" && input.Items.Cast<ComboBoxItem>().Any(x=>x.Tag?.ToString()=="full" && x.Content?.ToString()=="Full · commands, files and web"),"English labels changed tags");
-                Require(help.Text.Contains("including phone requests") && view.NameInput.Text=="설정" && SettingsStore.Load().Language=="ko","Language display changed stored data");
+                view.LoadSettings(current with{BrainProvider="claude",Language="en"});Require(AutomationProperties.GetName(input)=="AI tool access" && input.Items.Cast<ComboBoxItem>().Any(x=>x.Tag?.ToString()=="full" && x.Content?.ToString()=="Full · protected apps and password input"),"English labels changed tags");
+                Require(help.Text.Contains("phone requests") && view.NameInput.Text=="설정" && SettingsStore.Load().Language=="ko","Language display changed stored data");
             });
             Check("Claude full permission guidance renders offscreen without loading an engine or creating a native window",()=>
             {

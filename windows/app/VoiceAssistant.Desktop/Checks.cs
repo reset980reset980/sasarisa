@@ -402,6 +402,7 @@ public static class Checks
         failed += WakePhraseChecks.Run(rows);
         failed += CodexEffortChecks.Run(rows);
         failed += BrainAccessChecks.Run(rows);
+        failed += await ScreenAccessChecks.RunAsync(rows);
         failed += InputDeviceChecks.Run(rows);
         failed += await ConversationLanguageChecks.RunAsync(rows);
         failed += await ExecutionConsentChecks.RunAsync(rows);

@@ -57,13 +57,13 @@ public sealed partial class WindowsActions
 {
     IntPtr target;
     long targetVersion;
-    public sealed record InputTarget(IntPtr Window, int ProcessId, long ProcessStart, long Version);
+    public sealed record InputTarget(IntPtr Window, int ProcessId, long ProcessStart, long Version, string Access = "safe");
     static readonly HashSet<string> Protected = new(StringComparer.OrdinalIgnoreCase) { "KakaoTalk", "cmd", "powershell", "pwsh", "WindowsTerminal", "conhost", "OpenConsole", "Code", "Cursor", "Claude", "ChatGPT", "1Password", "KeePass", "KeePassXC", "Bitwarden", "CredentialUIBroker", "consent", "SystemSettings", "SecHealthUI", "regedit", "mmc" };
     public string TargetLabel => target != IntPtr.Zero ? Native.Title(target) : "선택된 창 없음";
-    public void TrackForeground()
+    public void TrackForeground(bool includeOwn = false)
     {
         var h = Native.GetForegroundWindow(); if (h == IntPtr.Zero) return; Native.GetWindowThreadProcessId(h, out var pid);
-        if (pid != Environment.ProcessId && Native.IsWindow(h) && target != h)
+        if ((pid != Environment.ProcessId || includeOwn && ScreenAccess.Full) && Native.IsWindow(h) && target != h)
         {
             target = h; targetVersion++;
             if (Environment.GetEnvironmentVariable("SASARISA_TRACE_INPUT") == "1") AppPaths.Log("input-target", $"process={Native.ProcessName(h)} handle={h.ToInt64():X} version={targetVersion}");
@@ -73,10 +73,11 @@ public sealed partial class WindowsActions
     public InputTarget CaptureInputTarget()
     {
         ValidateTarget(); var pid = GetPid(target); using var process = Process.GetProcessById(pid);
-        return new(target, pid, process.StartTime.ToUniversalTime().Ticks, targetVersion);
+        return new(target, pid, process.StartTime.ToUniversalTime().Ticks, targetVersion, ScreenAccess.Mode);
     }
     void RequireInputTarget(InputTarget expected)
     {
+        ScreenAccess.Require(expected.Access);
         TrackForeground();
         ValidateTarget();
         if (target != expected.Window || targetVersion != expected.Version || GetPid(target) != expected.ProcessId) throw new AgentStoppedException("요청을 처리하는 동안 대상 창이 바뀌어 멈췄어요. 작업할 창을 선택하고 다시 요청하세요.");
@@ -86,17 +87,18 @@ public sealed partial class WindowsActions
     public void EnsureInputTarget(InputTarget expected) => RequireInputTarget(expected);
     public void ValidateTarget()
     {
+        ScreenAccess.EnsureActive();
         if (target == IntPtr.Zero || !Native.IsWindow(target)) throw new InvalidOperationException("입력할 창을 먼저 선택하세요.");
         var name = Native.ProcessName(target);
-        if (name.Equals("KakaoTalk", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("카카오톡은 대화방 목록과 전용 초안·전송 기능을 사용하세요.");
-        if (string.IsNullOrEmpty(name) || Protected.Contains(name)) throw new InvalidOperationException("터미널·개발 도구·암호·시스템 설정 창에는 자동으로 입력하지 않아요.");
+        if (!ScreenAccess.Full && name.Equals("KakaoTalk", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("카카오톡은 대화방 목록과 전용 초안·전송 기능을 사용하세요.");
+        if (string.IsNullOrEmpty(name) || !ScreenAccess.AllowsProtected(Protected.Contains(name),GetPid(target)==Environment.ProcessId)) throw new InvalidOperationException("터미널·개발 도구·암호·시스템 설정 창에는 제한 권한으로 입력하지 않아요.");
     }
     async Task<IntPtr> Focus(CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); ValidateTarget(); var selected = target; Native.ShowWindow(selected, 9); Native.SetForegroundWindow(selected); await Task.Delay(120, token);
         if (Native.GetForegroundWindow() != selected) throw new InvalidOperationException("대상 창으로 전환하지 못했어요. 입력할 창을 직접 선택하세요.");
         var element = AutomationElement.FocusedElement;
-        if (element == null || element.Current.IsPassword) throw new InvalidOperationException("암호 입력란에는 입력하지 않아요.");
+        if (element == null || element.Current.IsPassword && !ScreenAccess.AllowsPasswordInput) throw new InvalidOperationException("암호 입력란에는 제한 권한으로 입력하지 않아요.");
         // UIA provider failures fail closed rather than typing into an unknown field.
         if (element.Current.ProcessId != GetPid(selected)) throw new InvalidOperationException("입력 위치가 바뀌었어요. 대상 창을 다시 선택하세요.");
         return selected;
@@ -131,7 +133,7 @@ public sealed partial class WindowsActions
         var selected = await Focus(token);
         if (expected != null) RequireInputTarget(expected);
         var bound = expected ?? CaptureInputTarget(); var element = AutomationElement.FocusedElement;
-        var before = CaptureEdit(element);
+        var sensitive=element.Current.IsPassword;var before = CaptureEdit(element);
         var normalized = FieldInsertion.Normalize(text);
         var tracked = before != null && before.State.Text.Length - before.State.Length + normalized.Length <= 6000;
         FieldEditState Read()
@@ -154,7 +156,7 @@ public sealed partial class WindowsActions
             {
                 token.ThrowIfCancellationRequested(); RequireInputTarget(bound);
                 var focused = AutomationElement.FocusedElement;
-                if (Native.GetForegroundWindow() != selected || focused == null || focused.Current.IsPassword || !Automation.Compare(focused, element)) throw new AgentStoppedException("입력 위치가 바뀌어 멈췄어요.");
+                if (Native.GetForegroundWindow() != selected || focused == null || focused.Current.IsPassword != sensitive || focused.Current.IsPassword && !ScreenAccess.AllowsPasswordInput || !Automation.Compare(focused, element)) throw new AgentStoppedException("입력 위치가 바뀌어 멈췄어요.");
                 var count = Math.Min(64, text.Length - offset);
                 if (offset + count < text.Length && char.IsHighSurrogate(text[offset + count - 1]) && char.IsLowSurrogate(text[offset + count])) count--;
                 Native.Type(text.Substring(offset, count)); offset += count; await Task.Yield();

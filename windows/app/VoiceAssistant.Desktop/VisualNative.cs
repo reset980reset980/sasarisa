@@ -28,7 +28,7 @@ public sealed partial class WindowsActions
                 for (var depth = 0; element != null && depth < 24; depth++, element = TreeWalker.ControlViewWalker.GetParent(element))
                 {
                     token.ThrowIfCancellationRequested(); var info = element.Current;
-                    if (info.IsPassword) throw new AgentStoppedException("보호된 항목은 누르지 않아요.");
+                    if (info.IsPassword && !ScreenAccess.AllowsPasswordInput) throw new AgentStoppedException("보호된 항목은 제한 권한으로 누르지 않아요.");
                     if (info.ProcessId != expected.ProcessId) return (VisualTarget?)null;
                     if (info.NativeWindowHandle == expected.Window.ToInt64()) break;
                     if (reader.Describe(element) is { } control)
@@ -116,12 +116,13 @@ internal static class VisualNative
     }
     internal static void CheckPoint(IntPtr target, int x, int y)
     {
+        ScreenAccess.EnsureActive();
         if (GetAncestor(WindowFromPoint(new Point { X = x, Y = y }), 2) != target) throw new AgentStoppedException("누를 위치가 대상 창에 속하지 않아요.");
         var element = AutomationElement.FromPoint(new System.Windows.Point(x, y));
         if (element == null) throw new InvalidOperationException("누를 위치의 앱 항목을 확인하지 못했어요.");
         for (var depth = 0; element != null && depth < 16; depth++, element = TreeWalker.RawViewWalker.GetParent(element))
         {
-            if (element.Current.IsPassword) throw new AgentStoppedException("암호 입력란은 이미지 좌표로 조작하지 않아요.");
+            if (element.Current.IsPassword && !ScreenAccess.AllowsPasswordInput) throw new AgentStoppedException("암호 입력란은 제한 권한으로 이미지 좌표 조작을 하지 않아요.");
             if (element.Current.NativeWindowHandle == target.ToInt64()) break;
         }
     }

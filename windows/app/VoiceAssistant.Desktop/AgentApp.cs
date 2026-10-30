@@ -13,6 +13,7 @@ public partial class App
     {
         var selection = ComboBrain.Resolve(settings, text);
         var requestSettings = selection.Settings;
+        using var screenAccess = ScreenAccess.Begin(requestSettings.BrainAccess,token);
         if (settings.BrainProvider == "combo")
         {
             window.AddMessage("system", selection.Description);
@@ -75,6 +76,7 @@ public partial class App
         catch (Exception ex) when (ex is not OperationCanceledException) { }
         async Task Guard(AssistantAction action)
         {
+            using var accessBinding = screenAccess.Enter();
             token.ThrowIfCancellationRequested();
             if (action.Kind is "list_windows" or "select_window" or "front")
             {
@@ -108,6 +110,7 @@ public partial class App
         }
         async Task<bool> Approve(AssistantAction action, CancellationToken cancellation)
             {
+                using var accessBinding = screenAccess.Enter();
                 RemoteExecution.Guard(action, true, preparing: true);
                 if (requestSettings.PreviewBeforeSend && action.Kind == "delegate_session" && RemoteExecution.Current != null) throw new AgentStoppedException("전송 전 미리 보기는 PC에서 확인해야 해요. 휴대폰에서는 전송하지 않았어요.");
                 await Guard(action);
@@ -168,6 +171,7 @@ public partial class App
             }
         async Task<ActionOutcome> Execute(AssistantAction action, CancellationToken cancellation)
         {
+            using var accessBinding = screenAccess.Enter();
             var approved = approvedEffect; approvedEffect = null;
             var result = await ExecuteCore(action, cancellation);
             if (approved is { } consent && consent.Action == action) ConfirmedExecutionSucceeded(consent.Effect, token);
@@ -266,9 +270,10 @@ public partial class App
                         actionHistory.Record("조회한 화면 항목 누르기", unavailable: "대상 앱에서 실제 반영된 결과를 확인하세요.");
                         return new("조회한 항목에 누르기를 전달했어요. 결과 화면을 다시 확인하세요.");
                     case "fill_field":
+                        var sensitiveField=Controls().Sensitive(action.Target);
                         try { await Controls().FillAsync(action.Target, action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 입력칸 글 교체 요청", unavailable: "글의 일부가 입력됐을 수 있어요. 대상 입력칸을 확인하세요."); throw; }
-                        return new("선택한 입력칸의 내용이 요청한 글과 일치하는 것을 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length }));
+                        return new(sensitiveField ? "암호 입력 요청을 전달했어요. 암호 내용은 읽거나 확인하지 않았어요." : "선택한 입력칸의 내용이 요청한 글과 일치하는 것을 확인했어요.", JsonSerializer.Serialize(new { characters = action.Value.Length, sensitive = sensitiveField, contents_verified = !sensitiveField }));
                     case "insert_field":
                         try { await Controls().InsertAsync(action.Target, action.Value, cancellation); }
                         catch { actionHistory.Record("중단된 입력칸 글 추가 요청", unavailable: "글의 일부가 입력됐을 수 있어요. 대상 입력칸을 확인하세요."); throw; }

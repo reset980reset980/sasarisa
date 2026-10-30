@@ -10,6 +10,7 @@ public partial class App
     async Task<string> ApplyDictationAsync(string text, CancellationToken token, WindowsActions.InputTarget? expected = null)
     {
         if (DictationProcessor.IsStop(text, settings.Name)) { StopTurn(); return StopReply; }
+        using var screenAccess = ScreenAccess.Begin(settings.BrainAccess,token);
         var target = expected ?? hands.CaptureInputTarget();
         var edit = await DictationProcessor.PrepareAsync(text, settings, token);
         token.ThrowIfCancellationRequested(); hands.EnsureInputTarget(target);

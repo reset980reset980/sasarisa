@@ -57,6 +57,7 @@ public partial class App
     {
         try
         {
+            using var screenAccess = ScreenAccess.Begin(options.BrainAccess,own.Token);
             var target = asDictation ? hands.CaptureInputTarget() : null;
             var transcript = await WhisperEngine.Shared.RefineAsync(WhisperWake.WithPrompt(options), wav, own.Token);
             if (own.IsCancellationRequested || languageRecognition != own || !ReferenceEquals(options, settings) ||

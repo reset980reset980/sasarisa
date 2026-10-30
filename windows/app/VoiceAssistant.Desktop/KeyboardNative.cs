@@ -21,11 +21,12 @@ public static partial class Native
 
 public sealed partial class WindowsActions
 {
-    public sealed record KeyFocus(AutomationElement Element, string Name, string Id, int Role, string Context = "");
+    public sealed record KeyFocus(AutomationElement Element, string Name, string Id, int Role, string Context = "", bool Sensitive = false);
     static KeyFocus ReadKeyFocus()
     {
         var element = AutomationElement.FocusedElement ?? throw new AgentStoppedException("키를 받을 항목을 확인하지 못했어요.");
-        var current = element.Current; if (current.IsPassword) throw new AgentStoppedException("암호 입력란에는 키를 전달하지 않아요.");
+        ScreenAccess.EnsureActive();
+        var current = element.Current; if (current.IsPassword && !ScreenAccess.AllowsPasswordInput) throw new AgentStoppedException("암호 입력란에는 제한 권한으로 키를 전달하지 않아요.");
         var labels = new List<string>(); var parent = TreeWalker.ControlViewWalker.GetParent(element);
         for (var depth = 0; parent != null && depth < 24; depth++, parent = TreeWalker.ControlViewWalker.GetParent(parent))
         {
@@ -33,12 +34,12 @@ public sealed partial class WindowsActions
             if (info.Name.Length > 0 && labels.Count < 4) labels.Add(info.Name.Length > 120 ? info.Name[..120] : info.Name);
             if (info.ControlType == ControlType.Window) break;
         }
-        return new(element, current.Name, current.AutomationId, current.ControlType.Id, string.Join(" / ", labels));
+        return new(element, current.Name, current.AutomationId, current.ControlType.Id, string.Join(" / ", labels),current.IsPassword);
     }
     static void EnsureKeyFocus(KeyFocus expected)
     {
         var current = ReadKeyFocus();
-        if (!Automation.Compare(expected.Element, current.Element) || expected.Name != current.Name || expected.Id != current.Id || expected.Role != current.Role || expected.Context != current.Context) throw new AgentStoppedException("확인 중 키를 받을 항목이 바뀌어 입력하지 않았어요.");
+        if (!Automation.Compare(expected.Element, current.Element) || expected.Name != current.Name || expected.Id != current.Id || expected.Role != current.Role || expected.Context != current.Context || expected.Sensitive != current.Sensitive) throw new AgentStoppedException("확인 중 키를 받을 항목이 바뀌어 입력하지 않았어요.");
     }
     public async Task<KeyFocus> CaptureKeyFocusAsync(InputTarget expected, CancellationToken token)
     { RequireInputTarget(expected); await Focus(token); RequireInputTarget(expected); var focus = await Task.Run(ReadKeyFocus, token); token.ThrowIfCancellationRequested(); RequireInputTarget(expected); return focus; }

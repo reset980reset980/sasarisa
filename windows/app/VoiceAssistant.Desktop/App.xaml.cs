@@ -51,6 +51,7 @@ public partial class App : System.Windows.Application
         hands.EditHistory = actionHistory;
         if (e.Args.Contains("--self-test") && e.Args.Contains("--ui-language-app-only")) { Shutdown(UiLanguageAppChecks.Run()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--brain-access-app-only")) { Shutdown(BrainAccessAppChecks.Run()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--screen-access-app-only")) { Shutdown(await ScreenAccessAppChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--brain-access-native")) { Shutdown(await BrainAccessNativeChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--ai-usage-app-only")) { Shutdown(await AiUsageAppChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
@@ -366,6 +367,7 @@ public partial class App : System.Windows.Application
         busy = true; CaptureInput(false); RefreshStatus();
         try
         {
+            using var screenAccess = ScreenAccess.Begin(settings.BrainAccess,token);
             var dictationTarget = isDictation ? dictationInputTarget ?? hands.CaptureInputTarget() : null;
             if (voice && !string.IsNullOrWhiteSpace(wav) && WhisperEngine.Enabled(settings) && (isDictation || !WhisperText.Quick(parsed)))
             {
@@ -572,7 +574,7 @@ public partial class App : System.Windows.Application
                 if (browserVideo is { Opened: true }) return await browserVideo.ControlAsync("seek", action.Number, token);
                 return videoWindow is {IsClosed:false}?await videoWindow.ControlAsync("seek",action.Number,token):"먼저 비서에게 유튜브 영상을 틀어 달라고 말해 주세요.";
             case "dictation_once": return await ApplyDictationAsync(action.Value, token, expected);
-            case "type": await hands.TypeAsync(action.Value, token, expected); break;
+            case "type": await hands.TypeAsync(ScreenAccess.TypedText(action.Value), token, expected); break;
             case "key": await hands.KeyAsync(action.Value, token, expected, [hotkeys?.Wake, hotkeys?.Stop], keyFocus); break;
             case "tap": await hands.TapAsync(action.Value, token, expected); break;
             case "browser": await hands.BrowserAsync(action.Value, token, expected); break;

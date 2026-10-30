@@ -42,7 +42,7 @@ public partial class MainWindow
         AsideFields.Visibility = id == "aside" ? Visibility.Visible : Visibility.Collapsed;
         ComboFields.Visibility = id == "combo" ? Visibility.Visible : Visibility.Collapsed;
         CodexEffortFields.Visibility = id is "codex" or "combo" ? Visibility.Visible : Visibility.Collapsed;
-        BrainAccessFields.Visibility = id is "claude" or "combo" ? Visibility.Visible : Visibility.Collapsed;
+        BrainAccessFields.Visibility = id.Length>0 ? Visibility.Visible : Visibility.Collapsed;
         RefreshBrainAccessHelp();
         ModelInput.IsEnabled = id != "combo";
         if (id == "combo") ComboStatus.Text = ComboBrain.Status();

@@ -34,7 +34,7 @@ public sealed partial class WindowsActions
             if (element.TryGetCurrentPattern(ValuePattern.Pattern, out var value)) return !((ValuePattern)value).Current.IsReadOnly;
             if (element.TryGetCurrentPattern(TextPattern.Pattern, out var text))
                 return ((TextPattern)text).DocumentRange.GetAttributeValue(TextPattern.IsReadOnlyAttribute) is bool readOnly && !readOnly;
-            return false;
+            return element.Current.IsPassword && ScreenAccess.AllowsPasswordInput;
         }
         internal static FieldEditState? Selection(AutomationElement element)
         {
@@ -71,19 +71,20 @@ public sealed partial class WindowsActions
         internal DesktopControl? Describe(AutomationElement element)
         {
             var current = element.Current;
-            if (current.ProcessId != expected.ProcessId || current.IsPassword || current.IsOffscreen || !current.IsEnabled) return null;
+            if (current.ProcessId != expected.ProcessId || current.IsPassword && !ScreenAccess.AllowsPasswordInput || current.IsOffscreen || !current.IsEnabled) return null;
             var role = current.ControlType.ProgrammaticName.Replace("ControlType.", "");
             var operation = ""; var state = "";
             if (current.ControlType is var kind && (kind == ControlType.Button || kind == ControlType.Hyperlink || kind == ControlType.MenuItem) && element.TryGetCurrentPattern(InvokePattern.Pattern, out _)) operation = "invoke";
             else if (element.TryGetCurrentPattern(TogglePattern.Pattern, out var toggle)) { operation = "toggle"; state = ((TogglePattern)toggle).Current.ToggleState.ToString(); }
             else if (element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var select)) { operation = "select"; state = ((SelectionItemPattern)select).Current.IsSelected ? "selected" : "unselected"; }
             else if (element.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out var expand) && ((ExpandCollapsePattern)expand).Current.ExpandCollapseState != ExpandCollapseState.LeafNode) { operation = "expand_or_collapse"; state = ((ExpandCollapsePattern)expand).Current.ExpandCollapseState.ToString(); }
-            var editable = Editable(element); var text = editable ? Text(element) : null;
+            var sensitive=current.IsPassword;var editable = Editable(element); var text = editable && !sensitive ? Text(element) : null;
+            if(sensitive)state="contents-hidden";
             if (text?.Length > 6000) editable = false;
             if (operation.Length == 0 && !editable) return null;
             var revision = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Native.Title(expected.Window) + "\n" + current.AutomationId + "\n" + current.Name + "\n" + (text ?? ""))));
-            var selection = editable ? TrySelection(element) : null;
-            return new(Identity(element), role, Short(current.Name), Context(element), operation, editable, state, revision, selection?.Start, selection?.Length ?? 0);
+            var selection = editable && !sensitive ? TrySelection(element) : null;
+            return new(Identity(element), role, Short(current.Name), Context(element), operation, editable, state, revision, selection?.Start, selection?.Length ?? 0,sensitive);
         }
         AutomationElement Validate(DesktopControl control, CancellationToken token)
         {
@@ -110,8 +111,9 @@ public sealed partial class WindowsActions
                 if (depth > 24 || visited++ >= 800 || controls.Count >= 240 || timer.ElapsedMilliseconds > 2000) { truncated = true; return; }
                 try
                 {
-                    if (element.Current.IsPassword || element.Current.IsOffscreen || element.Current.ProcessId != expected.ProcessId) return;
+                    if (element.Current.IsPassword && !ScreenAccess.AllowsPasswordInput || element.Current.IsOffscreen || element.Current.ProcessId != expected.ProcessId) return;
                     if (element != root && Describe(element) is { } item && !elements.ContainsKey(item.Key)) { elements.Add(item.Key, element); controls.Add(item); }
+                    if(element.Current.IsPassword)return; // Never traverse or read the secret subtree.
                     var child = TreeWalker.ControlViewWalker.GetFirstChild(element);
                     while (child != null && !truncated) { Walk(child, depth + 1); child = TreeWalker.ControlViewWalker.GetNextSibling(child); }
                 }
@@ -144,7 +146,13 @@ public sealed partial class WindowsActions
             {
                 token.ThrowIfCancellationRequested(); owner.RequireInputTarget(expected);
                 var focused = AutomationElement.FocusedElement;
-                if (Native.GetForegroundWindow() != expected.Window || focused == null || focused.Current.IsPassword || !Automation.Compare(focused, element)) throw new AgentStoppedException("입력칸이 바뀌어 글 입력을 멈췄어요.");
+                if (Native.GetForegroundWindow() != expected.Window || focused == null || focused.Current.IsPassword && !ScreenAccess.AllowsPasswordInput || !Automation.Compare(focused, element)) throw new AgentStoppedException("입력칸이 바뀌어 글 입력을 멈췄어요.");
+            }
+            if(control.Sensitive)
+            {
+                void GuardSecret(){GuardField();if(new[]{0x10,0x11,0x12,0x5B,0x5C}.Any(Native.KeyDown))throw new AgentStoppedException("보조 키를 놓은 뒤 다시 요청하세요.");}
+                await owner.TrackEditAsync("암호 입력 요청",expected,element,"",()=>SensitiveFieldWriter.ReplaceAsync(text,GuardSecret,()=>Native.Press(0x41,0x11),()=>Native.Press(0x08),Native.Type,token),token);
+                return;
             }
             await owner.TrackEditAsync("조회한 입력칸의 글 교체", expected, element, text, async () =>
             {

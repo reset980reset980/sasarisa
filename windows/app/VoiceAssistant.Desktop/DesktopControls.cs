@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace VoiceAssistant.Desktop;
 
-public sealed record DesktopControl(string Key, string Role, string Name, string Context, string Operation, bool Editable, string State, string Revision, int? SelectionStart = null, int SelectionLength = 0);
+public sealed record DesktopControl(string Key, string Role, string Name, string Context, string Operation, bool Editable, string State, string Revision, int? SelectionStart = null, int SelectionLength = 0, bool Sensitive = false);
 public sealed record DesktopControlSnapshot(string Application, string Window, IReadOnlyList<DesktopControl> Controls, bool Truncated = false);
-public sealed record ObservedControl(string Id, string Role, string Name, string Context, string Operation, bool Editable, string State, int? SelectionStart = null, int SelectionLength = 0);
+public sealed record ObservedControl(string Id, string Role, string Name, string Context, string Operation, bool Editable, string State, int? SelectionStart = null, int SelectionLength = 0, bool Sensitive = false);
 public sealed record ControlPage(string Application, string Window, IReadOnlyList<ObservedControl> Controls, int Total, int? Next, bool Truncated);
 internal sealed record PreparedButton(AssistantAction Action, DesktopControls Controls, string Id, ActionEffect Effect)
 {
@@ -49,26 +49,29 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
     readonly Dictionary<string, DesktopControl> observed = new(StringComparer.Ordinal);
     DateTimeOffset expires;
     string observedWindow = "";
+    string observedAccess="safe";
     public async Task<ControlPage> ListAsync(string filter, int offset, CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); observed.Clear();
         if (filter.Length > 120 || offset is < 0 or > 240) throw new ArgumentException("화면 목록의 검색어나 페이지를 확인하세요.");
-        var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();
+        var access=ScreenAccess.Mode;ScreenAccess.EnsureActive();var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();ScreenAccess.Require(access);observedAccess=access;
         observedWindow = snapshot.Window;
-        var all = snapshot.Controls.Where(x => filter.Length == 0 || x.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || x.Context.Contains(filter, StringComparison.OrdinalIgnoreCase)).Take(240).ToArray();
+        var all = snapshot.Controls.Where(x => !x.Sensitive || ScreenAccess.Full).Where(x => filter.Length == 0 || x.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || x.Context.Contains(filter, StringComparison.OrdinalIgnoreCase)).Take(240).ToArray();
         var page = all.Skip(offset).Take(PageSize).Select(x =>
         {
             var id = Guid.NewGuid().ToString("N"); observed.Add(id, x);
-            return new ObservedControl(id, x.Role, x.Name, x.Context, x.Operation, x.Editable, x.State, x.SelectionStart, x.SelectionLength);
+            return new ObservedControl(id, x.Role, x.Name, x.Context, x.Operation, x.Editable, x.Sensitive ? "contents-hidden" : x.State, x.Sensitive ? null : x.SelectionStart, x.Sensitive ? 0 : x.SelectionLength,x.Sensitive);
         }).ToArray();
         expires = now().AddMinutes(2);
         return new(snapshot.Application, snapshot.Window, page, all.Length, offset + page.Length < all.Length ? offset + page.Length : null, snapshot.Truncated);
     }
     DesktopControl Find(string id)
     {
+        ScreenAccess.Require(observedAccess);
         if (now() >= expires || !observed.TryGetValue(id, out var control)) throw new AgentStoppedException("화면 목록이 오래됐거나 해당 항목이 없어요. 목록을 다시 확인한 뒤 요청하세요.");
         return control;
     }
+    internal bool Sensitive(string id) => Find(id).Sensitive;
     public string Describe(AssistantAction action)
     {
         var control = Find(action.Kind is "fill_field" or "insert_field" ? action.Target : action.Value);
@@ -76,6 +79,7 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
         if (action.Kind == "insert_field" && control.SelectionStart == null) throw new InvalidOperationException("이 입력칸의 커서 위치를 확인하지 못했어요. 입력칸을 선택한 뒤 다시 요청하세요.");
         var role = control.Role switch { "Edit" => "입력칸", "Document" => "문서", "Button" => "버튼", "Hyperlink" => "링크", "MenuItem" => "메뉴", "CheckBox" => "확인란", "RadioButton" => "선택 항목", "TabItem" => "탭", "ComboBox" => "선택 목록", _ => "항목" };
         var label = $"{control.Context} / {role} · {control.Name}";
+        if(control.Sensitive)return label+UiText.Format("\n\n암호 입력칸에 {0}자를 전달합니다. 내용은 읽거나 표시하지 않으며 자동으로 되돌릴 수 없습니다.",action.Value.Length);
         var operation = control.Operation switch { "invoke" => "누르기", "toggle" => "선택 상태 바꾸기", "select" => "선택하기", "expand_or_collapse" => control.State == "Expanded" ? "목록 접기" : "목록 펼치기", _ => "" };
         if (action.Kind == "insert_field") return label + (control.SelectionLength == 0 ? "\n\n현재 커서 위치에 다음 글을 넣습니다:\n" : "\n\n현재 선택된 부분만 다음 글로 바꿉니다. 나머지 글은 보존합니다:\n") + action.Value;
         return action.Kind == "fill_field" ? label + "\n\n입력칸 전체를 다음 내용으로 바꿉니다:\n" + action.Value : label + "\n동작: " + operation;
@@ -89,7 +93,7 @@ public sealed class DesktopControls(IDesktopControlDriver driver, Func<DateTimeO
     {
         if (action.Kind != "tap") throw new ArgumentException("이름으로 누를 버튼 요청이 필요해요.");
         token.ThrowIfCancellationRequested(); observed.Clear();
-        var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested(); observedWindow = snapshot.Window;
+        var access=ScreenAccess.Mode;ScreenAccess.EnsureActive();var snapshot = await driver.ReadAsync(token); token.ThrowIfCancellationRequested();ScreenAccess.Require(access);observedAccess=access; observedWindow = snapshot.Window;
         if (snapshot.Truncated) throw new AgentStoppedException("버튼 목록 전체를 확인하지 못했어요. 목록에서 정확한 항목 ID로 요청해 주세요.");
         var matches = snapshot.Controls.Where(x => x.Operation == "invoke" && x.Role is "Button" or "Hyperlink" or "MenuItem")
             .Where(x => string.Equals(x.Name, action.Value, StringComparison.OrdinalIgnoreCase)).ToArray();
