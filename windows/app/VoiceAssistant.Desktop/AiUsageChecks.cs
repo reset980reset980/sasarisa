@@ -133,7 +133,7 @@ internal static class AiUsageChecks
         {
             var args = Brain.ClaudeInfo("fixture.exe", new()).ArgumentList.ToArray();
             string Next(string key) => args[Array.IndexOf(args, key) + 1];
-            Require(args.Contains("--restricted") && Next("--tools") == "" && args.Contains("--strict-mcp-config") && Next("--mcp-config") == "{\"mcpServers\":{}}" && args.Contains("--disable-slash-commands") && Next("--setting-sources") == "" && args.Contains("--no-session-persistence") && Next("--output-format") == "stream-json" && args.Contains("--verbose"), "Metadata expanded CLI authority");
+            Require(args.Contains("--restricted") && Next("--tools") == "WebSearch" && args.Contains("--strict-mcp-config") && Next("--mcp-config") == "{\"mcpServers\":{}}" && args.Contains("--disable-slash-commands") && Next("--setting-sources") == "" && args.Contains("--no-session-persistence") && Next("--output-format") == "stream-json" && args.Contains("--verbose"), "Metadata expanded CLI authority");
         }));
         await Check("Codex quota reader bounds recent days, newest five files and tail bytes", async () =>
         {

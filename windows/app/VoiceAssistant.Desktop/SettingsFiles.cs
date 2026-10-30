@@ -64,7 +64,7 @@ public sealed class SettingsImportWindow : Window
         header.Children.Add(new TextBlock { Text = UiText.Get("적용하면 저장된 설정과 화면에서 편집 중인 값을 바꿉니다.\nAPI 키·로그인·기억·루틴·등록 앱은 현재 상태를 유지합니다."), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,12,0,14), Foreground = Brushes.SlateGray });
         connections = new CheckBox { Content = allowDevices ? UiText.Get("AI 연결·Whisper 주소·코딩 폴더도 가져오기") : UiText.Get("AI·외부 목소리 연결도 가져오기"), Margin = new Thickness(0,0,0,10) };
         devices = new CheckBox { Content = UiText.Get("마이크·시작 시 듣기·목소리·출력 장치·알림 화면도 가져오기"), Margin = new Thickness(0,0,0,15), IsEnabled = allowDevices, Visibility = allowDevices ? Visibility.Visible : Visibility.Collapsed }; header.Children.Add(connections); header.Children.Add(devices);
-        permissions = new CheckBox { Content = UiText.Get("실행 방식·자유 모드·전송 미리 보기도 가져오기"), Margin = new Thickness(0,0,0,15) }; header.Children.Add(permissions);
+        permissions = new CheckBox { Content = UiText.Get("AI 권한·실행 방식·자유 모드·전송 미리 보기도 가져오기"), Margin = new Thickness(0,0,0,15) }; header.Children.Add(permissions);
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0,16,0,0) }; DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         var cancel = new Button { Content = UiText.Get("취소"), IsCancel = true, Padding = new Thickness(20,9,20,9), Margin = new Thickness(0,0,10,0), Style = (Style)Application.Current.FindResource("SecondaryButton") };
         var apply = new Button { Content = UiText.Get("확인한 설정 적용"), Padding = new Thickness(20,9,20,9), Style = (Style)Application.Current.FindResource("ActionButton") }; footer.Children.Add(cancel); footer.Children.Add(apply);

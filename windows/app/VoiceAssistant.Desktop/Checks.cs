@@ -401,6 +401,7 @@ public static class Checks
         failed += MacSettingsChecks.Run(rows);
         failed += WakePhraseChecks.Run(rows);
         failed += CodexEffortChecks.Run(rows);
+        failed += BrainAccessChecks.Run(rows);
         failed += InputDeviceChecks.Run(rows);
         failed += await ConversationLanguageChecks.RunAsync(rows);
         failed += await ExecutionConsentChecks.RunAsync(rows);

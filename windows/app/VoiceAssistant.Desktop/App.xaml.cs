@@ -50,6 +50,8 @@ public partial class App : System.Windows.Application
         }
         hands.EditHistory = actionHistory;
         if (e.Args.Contains("--self-test") && e.Args.Contains("--ui-language-app-only")) { Shutdown(UiLanguageAppChecks.Run()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--brain-access-app-only")) { Shutdown(BrainAccessAppChecks.Run()); return; }
+        if (e.Args.Contains("--self-test") && e.Args.Contains("--brain-access-native")) { Shutdown(await BrainAccessNativeChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--ai-usage-app-only")) { Shutdown(await AiUsageAppChecks.RunAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--multilingual-app-only")) { Shutdown(await RunMultilingualAppChecksAsync()); return; }
         if (e.Args.Contains("--self-test") && e.Args.Contains("--personal-data-app-only")) { Shutdown(PersonalDataAppChecks.Run()); return; }

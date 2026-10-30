@@ -92,7 +92,7 @@ public static class SettingsTransfer
             next.Tts = current.Tts with { };
         }
         if (!devices) { next.Device = current.Device; next.DeviceLabel = current.DeviceLabel; next.VoiceId = current.VoiceId; next.OutputId = current.OutputId; next.Desktop.OverlayScreen = current.Desktop.OverlayScreen; next.Desktop.StartupListening = current.Desktop.StartupListening; }
-        if (!permissions) { next.FreeMode = current.FreeMode; next.FreeModeAsked = current.FreeModeAsked; next.ConfirmDelegate = current.ConfirmDelegate; next.PreviewBeforeSend = current.PreviewBeforeSend; }
+        if (!permissions) { next.FreeMode = current.FreeMode; next.FreeModeAsked = current.FreeModeAsked; next.ConfirmDelegate = current.ConfirmDelegate; next.PreviewBeforeSend = current.PreviewBeforeSend; next.BrainAccess = current.BrainAccess; }
         Validate(next); return next;
     }
     public static string Describe(UiSettings before, UiSettings after)
@@ -102,6 +102,7 @@ public static class SettingsTransfer
         void Item(string label, object? oldValue, object? newValue) { var oldText = Display(oldValue); var newText = Display(newValue); if (oldText != newText) lines.Add($"{label}\n  {oldText}\n  → {newText}"); }
         Item(UiText.Get("대화 언어"), ConversationLanguage.Get(before.Language).Label, ConversationLanguage.Get(after.Language).Label);
         Item(UiText.Get("자유 모드"), before.FreeMode, after.FreeMode);
+        Item(UiText.Get("Claude 작업 권한"), BrainAccess.Label(before.BrainAccess), BrainAccess.Label(after.BrainAccess));
         Item(UiText.Get("실행 방식"), ExecutionConsent.ModeLabel(before.ConfirmDelegate), ExecutionConsent.ModeLabel(after.ConfirmDelegate));
         Item(UiText.Get("Claude 전송 전 미리 보기"), before.PreviewBeforeSend, after.PreviewBeforeSend);
         Item(UiText.Get("호출 이름"), before.Name, after.Name); Item(UiText.Get("호출 방식"), Mode(before.Activation), Mode(after.Activation)); Item(UiText.Get("입력 마이크"), before.Device, after.Device);

@@ -56,6 +56,7 @@ public static class SettingsStore
         _ = ConversationLanguage.Get(s.Language);
         _ = ExecutionConsent.ModeLabel(s.ConfirmDelegate);
         _ = CodexEffort.Label(s.BrainEffort);
+        BrainAccess.Validate(s.BrainAccess);
         if (s.Activation is not ("voice" or "hotkey" or "hold")) throw new ArgumentException("호출 방식을 확인하세요.");
         if (s.BargeIn is not ("auto" or "any" or "wake" or "off")) throw new ArgumentException("답변 중 끼어들기 방식을 확인하세요.");
         if (s.GrowTogether is not ("off" or "solo" or "together")) throw new ArgumentException("공유 학습 방식을 확인하세요.");

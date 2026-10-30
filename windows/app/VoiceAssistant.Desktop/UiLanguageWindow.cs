@@ -7,7 +7,7 @@ public partial class MainWindow
 {
     void RefreshUiText() => OnUi(() =>
     {
-        ShowPage(_page); UpdateHotkeyHints(); RefreshLanguageHelp();
+        ShowPage(_page); UpdateHotkeyHints(); RefreshLanguageHelp(); RefreshBrainAccessHelp();
         if (_lastUiStatus is { } state) SetStatusCore(state.Title,_statusDetailCopy?.Render() ?? state.Detail,_statusDetailCopy,state.Listening,state.Busy,state.Paused,state.Attention);
         foreach (var child in HistoryPanel.Children)
             if (child is Border { Child: StackPanel panel } && panel.Children.Count > 0 && panel.Children[0] is Grid header)

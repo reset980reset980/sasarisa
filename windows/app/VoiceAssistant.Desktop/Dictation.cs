@@ -118,7 +118,7 @@ public static class DictationProcessor
                 request = request.Replace("reply에는 다듬은 글만 넣고 actions는 반드시 빈 배열로 반환하세요.", "다듬은 글만 반환하세요.");
                 return new CommandPlan(await new AsideClient().AskAsync(request, "", selected.BrainModel, cancellation, textOnly: true), Array.Empty<AssistantAction>());
             }
-            return await new Brain().AskAsync(request, "", selected, cancellation);
+            return await new Brain().AskAsync(request, "", selected, cancellation, textOnly: true);
         };
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token); limit.CancelAfter(timeout ?? TimeSpan.FromSeconds(6));
         try

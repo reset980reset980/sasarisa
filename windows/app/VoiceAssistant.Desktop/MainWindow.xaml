@@ -236,6 +236,14 @@
                                     <ComboBox x:Name="CodexEffortInput" SelectedIndex="0" AutomationProperties.Name="{DynamicResource Ui.29461C0DD3144934A48D10B7}"><ComboBoxItem Content="{DynamicResource Ui.58EFC65722C2DC6618689BD8}" Tag="low" /><ComboBoxItem Content="{DynamicResource Ui.666599FEBD987F532EA6AB00}" Tag="medium" /><ComboBoxItem Content="{DynamicResource Ui.DB457572E88F1B2C9DC0874B}" Tag="high" /></ComboBox>
                                     <TextBlock Text="{DynamicResource Ui.C23053668C5663BF24ADADB3}" Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,0" />
                                 </StackPanel>
+                                <StackPanel x:Name="BrainAccessFields" Visibility="Collapsed" Margin="0,17,0,0">
+                                    <TextBlock Text="{DynamicResource Ui.FFF6A37420BA01D9D235B4CF}" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox x:Name="BrainAccessInput" SelectedIndex="0" SelectionChanged="BrainAccess_SelectionChanged" AutomationProperties.Name="{DynamicResource Ui.FFF6A37420BA01D9D235B4CF}">
+                                        <ComboBoxItem Content="{DynamicResource Ui.4C0EECF4309623EFB4FB4EB4}" Tag="safe" />
+                                        <ComboBoxItem Content="{DynamicResource Ui.2DB2225BB7B449521E3E477A}" Tag="full" />
+                                    </ComboBox>
+                                    <TextBlock x:Name="BrainAccessHelp" Style="{StaticResource HelpText}" TextWrapping="Wrap" Margin="0,7,0,0" />
+                                </StackPanel>
                                 <StackPanel x:Name="OllamaFields" Visibility="Collapsed"><TextBlock Text="{DynamicResource Ui.20D0F3B1A68482131A271302}" Style="{StaticResource FieldLabel}" Margin="0,17,0,7" /><TextBox x:Name="BrainUrlInput" Text="http://127.0.0.1:11434" Style="{StaticResource Field}" TextChanged="BrainUrlInput_TextChanged" AutomationProperties.Name="{DynamicResource Ui.9372B81EDFCBB53AC7A64E4F}" /></StackPanel>
                                 <StackPanel x:Name="ApiFields" Visibility="Collapsed" Margin="0,16,0,0">
                                     <TextBlock x:Name="ApiDestination" Style="{StaticResource HelpText}" />

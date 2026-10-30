@@ -119,8 +119,8 @@ public static class MacSettingsTransfer
             Flag("freeMode", v => next.FreeMode = v); Flag("freeModeAsked", v => next.FreeModeAsked = v);
             if (Any("confirmDelegate")) next.ConfirmDelegate = Text(root, "confirmDelegate");
             Flag("previewBeforeSend", v => next.PreviewBeforeSend = v);
-            if (Any("freeMode", "freeModeAsked", "confirmDelegate", "previewBeforeSend")) notes.Add("실행 방식·자유 모드·제안 상태·전송 미리 보기는 ‘실행 방식·자유 모드·전송 미리 보기도 가져오기’를 선택한 경우에만 적용합니다.");
-            if (Any("brainAccess")) notes.Add("AI 도구의 별도 작업 권한은 현재 Windows 동작을 유지합니다.");
+            if (Any("brainAccess")) { next.BrainAccess = Text(root,"brainAccess"); BrainAccess.Validate(next.BrainAccess); }
+            if (Any("freeMode", "freeModeAsked", "confirmDelegate", "previewBeforeSend", "brainAccess")) notes.Add("AI 작업 권한·실행 방식·자유 모드·제안 상태·전송 미리 보기는 ‘AI 권한·실행 방식·자유 모드·전송 미리 보기도 가져오기’를 선택한 경우에만 적용합니다. 전체 권한의 Claude 자체 도구는 비서의 실행 확인·되돌리기를 거치지 않습니다.");
             if (Any("proRemote", "growTogether")) notes.Add("휴대폰 원격 접근과 표현 공유 참여 여부는 현재 Windows 선택을 유지합니다.");
             if (Any("sayVoice", "sayRate", "browserApp", "apps")) notes.Add("Apple 목소리·읽기 속도·Mac 브라우저·앱 별칭은 제외했습니다. Windows에서 다시 선택하세요.");
             if (Any("maxUtteranceSec", "chime", "router", "keepAudio")) notes.Add("연속 발화 길이·알림음·빠른 분류기·음성 보관 설정은 현재 Windows 동작을 유지합니다.");

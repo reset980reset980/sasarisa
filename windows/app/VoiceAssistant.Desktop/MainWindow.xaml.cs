@@ -52,6 +52,7 @@ public sealed record UiSettings
     public string BrainProvider { get; set; } = "claude";
     public string BrainModel { get; set; } = "";
     public string BrainEffort { get; set; } = "low";
+    public string BrainAccess { get; set; } = "safe";
     public string BrainUrl { get; set; } = "http://127.0.0.1:11434";
     public Dictionary<string, ProviderPreferences> ProviderProfiles { get; set; } = new();
     public string ProjectDirectory { get; set; } = "";
@@ -258,6 +259,7 @@ public partial class MainWindow : Window
         SelectTag(ProviderInput, settings.BrainProvider);
         ModelInput.Text = settings.BrainModel;
         SelectTag(CodexEffortInput, settings.BrainEffort);
+        SelectTag(BrainAccessInput, settings.BrainAccess);
         BrainUrlInput.Text = ApiProviders.Find(settings.BrainProvider) is { EditableUrl: false } api ? api.BaseUrl : settings.BrainUrl;
         _draftProvider = settings.BrainProvider;
         ApiKeyInput.Clear();
@@ -431,6 +433,8 @@ public partial class MainWindow : Window
         StoreProviderDraft();
         try { _ = CodexEffort.Label(SelectedTag(CodexEffortInput)); }
         catch (ArgumentException ex) { SettingsError(ex.Message, CodexEffortInput); return; }
+        try { BrainAccess.Validate(SelectedTag(BrainAccessInput)); }
+        catch (ArgumentException ex) { SettingsError(ex.Message, BrainAccessInput); return; }
         DesktopPreferences desktop;
         TextPreferences textPreferences;
         try { desktop = ReadDesktopPreferences(); desktop.Validate(SelectedTag(ActivationInput)); }
@@ -467,6 +471,7 @@ public partial class MainWindow : Window
             BrainProvider = SelectedTag(ProviderInput),
             BrainModel = ModelInput.Text.Trim(),
             BrainEffort = SelectedTag(CodexEffortInput),
+            BrainAccess = SelectedTag(BrainAccessInput),
             BrainUrl = BrainUrlInput.Text.Trim(),
             ProviderProfiles = new(_providerProfiles),
             ProjectDirectory = ProjectDirectoryInput.Text.Trim(),
